@@ -28,4 +28,4 @@ License (CC BY 4.0).
 
 When redistributing or adapting The Null or its original assets, please credit:
 
-Original project created by Tianran Yu (@leAnonymouse254).
+Original project created by Tianran Yu (@ch3ddarch33se).
