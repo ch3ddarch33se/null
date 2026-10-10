@@ -1,0 +1,85 @@
+plugins {
+    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+    id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    maven { url = 'https://cursemaven.com' }
+    mavenCentral()
+}
+
+// A local copy is optional. It is never bundled into The Null.
+def localSiftJar = file('libs/Sift-Backport-1.0.3.0-26.3-fabric.jar')
+def siftArtifact = localSiftJar.exists()
+    ? files(localSiftJar)
+    : 'curse.maven:sift-backport-1714907:9045257'
+
+configurations {
+    siftOverlayInput
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    modImplementation siftArtifact
+    siftOverlayInput siftArtifact
+}
+
+// Build a tiny resource override from the selected Sift Backport jar. The
+// original mod jar is only read as an input; it is not redistributed here.
+def generatedSiftResources = layout.buildDirectory.dir('generated/sift-overlay')
+sourceSets {
+    main {
+        resources.srcDir(generatedSiftResources)
+    }
+}
+
+tasks.register('generateSiftOverlay', Exec) {
+    inputs.files(configurations.siftOverlayInput)
+    inputs.file('tools/generate_sift_overlay.py')
+    outputs.dir(generatedSiftResources)
+    doFirst {
+        def siftJar = configurations.siftOverlayInput.files.find { it.name.endsWith('.jar') }
+        if (siftJar == null) {
+            throw new GradleException('Sift Backport 26.3 Fabric JAR was not resolved')
+        }
+        commandLine('python3', 'tools/generate_sift_overlay.py',
+            '--sift-jar', siftJar.absolutePath,
+            '--output', generatedSiftResources.get().asFile.absolutePath)
+    }
+}
+
+tasks.named('processResources') {
+    dependsOn tasks.named('generateSiftOverlay')
+    inputs.property('version', project.version)
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 25
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+}
+
+jar {
+    from('LICENSE') {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
+    from('docs/THIRD_PARTY.md') {
+        into('META-INF')
+    }
+}

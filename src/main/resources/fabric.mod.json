@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "thenull",
+  "version": "${version}",
+  "name": "The Null",
+  "description": "Early prototype of a hidden Sculk world beneath the Sift.",
+  "authors": ["Tianran Yu"],
+  "license": "Apache-2.0",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["com.ch3ddarch33se.thenull.TheNull"]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.3",
+    "java": ">=25",
+    "fabric-api": "*",
+    "sift_backport": ">=1.0.3.0"
+  }
+}
