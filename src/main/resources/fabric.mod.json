@@ -7,6 +7,7 @@
   "authors": ["Tianran Yu"],
   "license": "Apache-2.0",
   "environment": "*",
+  "mixins": ["thenull.mixins.json"],
   "entrypoints": {
     "main": ["com.ch3ddarch33se.thenull.TheNull"]
   },

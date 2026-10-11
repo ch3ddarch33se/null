@@ -10,10 +10,11 @@ upstream metadata and these world-generation JSON definitions:
 - `data/sift/dimension_type/sift.json`
 - `data/sift/worldgen/noise_settings/sift.json`
 
-The two adapted JSON definitions are included inside The Null's built-in data
-pack, `resourcepacks/null_extension`. The generated pack also includes original
-`thenull` noise definitions and factual `SIFT_ATTRIBUTION.txt`. The original
-Sift Java code, other resources, and entire dependency JAR are not copied.
+Only the adapted dimension type is included inside The Null's built-in data
+pack, `resourcepacks/null_extension`, with factual `SIFT_ATTRIBUTION.txt`.
+The noise settings are read for compatibility validation and remain unchanged
+in Sift Backport. The original Sift Java code, other resources, and entire
+dependency JAR are not copied.
 This compatibility layer is isolated for eventual migration away from Sift
 Backport. It extends `sift:sift`; it does not create a new dimension.
 

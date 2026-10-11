@@ -1,4 +1,11 @@
-# v0.0.1 validation — 2026-10-11
+# Initial v0.0.1 validation — historical results, 2026-10-11
+
+The results below describe the original noise-density prototype before the
+first in-game feedback. The current tunnel-path revision, performance results,
+real-chunk connectivity tests and limitations are documented in
+[PERFORMANCE.md](PERFORMANCE.md). The old client reports/screenshots below do
+not validate the revised terrain. The separate current client-performance
+comparison and its results are documented there.
 
 The prototype compiled, loaded on a dedicated Fabric server, loaded from the
 actual built mod JAR through Fabric's production launcher, and ran real-client

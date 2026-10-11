@@ -34,6 +34,7 @@ public final class ClientVerification implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext context) {
         Map<String, String> report = new LinkedHashMap<>();
+        boolean performance = Boolean.getBoolean("thenull.clientPerformance");
         try (TestSingleplayerContext world = context.worldBuilder()
             .setUseConsistentSettings(false)
             .adjustSettings(settings -> {
@@ -45,10 +46,24 @@ public final class ClientVerification implements FabricClientGameTest {
             }).create()) {
             report.put("world", world.getWorldSave().getSaveDirectory().toString());
             context.runOnClient(client -> {
-                client.options.renderDistance().set(4);
+                client.options.renderDistance().set(performance ? 8 : 4);
                 client.options.simulationDistance().set(8);
                 client.options.gamma().set(0.0);
+                if (performance) {
+                    client.options.enableVsync().set(false);
+                    client.options.framerateLimit().set(260);
+                    client.options.inactivityFpsLimit().set(net.minecraft.client.InactivityFpsLimit.MINIMIZED);
+                    client.options.pauseOnLostFocus = false;
+                }
+                client.options.broadcastOptions();
             });
+            world.getConnection().waitForServerboundPackets();
+            if (performance) world.getServer().runOnServer(server -> {
+                require(world.getConnection().getServerPlayer().requestedViewDistance() == 8,
+                    "Client render-distance update did not reach the integrated server");
+            });
+            ClientPerformanceCapture capture = performance ? new ClientPerformanceCapture(world) : null;
+            if (performance) report.put("performance_settings", "render_distance=8, simulation_distance=8, vsync=false, fps_option=260 (maximum), inactivity_limit=MINIMIZED (AFK cap disabled), gamma=0, peaceful, seed=123456789; 5s settle +10 FPS polls at 1s intervals per location");
             // Begin on a verified natural floor, so the return position is a
             // meaningful test rather than a creative-mode airborne location.
             world.getServer().runOnServer(server -> {
@@ -58,14 +73,15 @@ public final class ClientVerification implements FabricClientGameTest {
                     feet.getZ() + 0.5, Set.<Relative>of(), 45, 12, true), "Initial safe test placement failed");
             });
             world.getConnection().waitForClientboundPackets();
-            world.getConnection().waitForChunksRender(1200);
+            waitForRenderedChunks(context, world, performance);
             context.waitTicks(4);
             report.put("overworld_screenshot", context.takeScreenshot("thenull-overworld").toString());
+            if (capture != null) capture.measure(context, world, report, "overworld");
 
             sendCommand(context, "null enter");
             context.waitFor(client -> client.level != null && client.level.dimension().equals(SIFT)
                 && client.player != null && client.player.getY() < -250, 1200);
-            world.getConnection().waitForChunksRender(1200);
+            waitForRenderedChunks(context, world, performance);
             world.getServer().runOnServer(server -> {
                 ServerPlayer player = world.getConnection().getServerPlayer();
                 require(player.level().dimension().equals(SIFT), "Server player did not enter sift:sift");
@@ -82,6 +98,7 @@ public final class ClientVerification implements FabricClientGameTest {
             context.waitTicks(4);
             report.put("null_enter", "PASSED: real client command packets, server transition, client sift:sift dimension, safe sculk landing, rendered destination chunks");
             report.put("null_surface_screenshot", context.takeScreenshot("thenull-null-surface").toString());
+            if (capture != null) capture.measure(context, world, report, "null_surface");
 
             // Night vision is a temporary development inspection aid. Preserve
             // the native-light screenshot above and remove the effect before
@@ -118,7 +135,7 @@ public final class ClientVerification implements FabricClientGameTest {
                         cave.getZ() + 0.5, Set.<Relative>of(), 45, 5, true), "Cave screenshot placement failed");
                 });
                 world.getConnection().waitForClientboundPackets();
-                world.getConnection().waitForChunksRender(1200);
+                waitForRenderedChunks(context, world, performance);
                 context.waitTicks(4);
                 report.put("cave_night_vision_screenshot",
                     context.takeScreenshot("thenull-null-cave-development-night-vision").toString());
@@ -132,7 +149,7 @@ public final class ClientVerification implements FabricClientGameTest {
             sendCommand(context, "null leave");
             context.waitFor(client -> client.level != null && client.level.dimension().equals(Level.OVERWORLD)
                 && client.player != null && client.player.getY() >= -64, 1200);
-            world.getConnection().waitForChunksRender(1200);
+            waitForRenderedChunks(context, world, performance);
             world.getServer().runOnServer(server -> {
                 ServerPlayer player = world.getConnection().getServerPlayer();
                 require(player.level() == server.overworld(), "Real client /null leave did not return to the Overworld");
@@ -155,15 +172,16 @@ public final class ClientVerification implements FabricClientGameTest {
                 BlockPos surface = upperTerrain(sift);
                 player.getAbilities().flying = true;
                 player.onUpdateAbilities();
-                require(player.teleportTo(sift, surface.getX() + 0.5, Math.max(110, surface.getY() + 16),
-                    surface.getZ() + 0.5, Set.<Relative>of(), 45, 40, true),
+                require(player.teleportTo(sift, surface.getX() + 0.5, performance ? surface.getY() + 3 : Math.max(110, surface.getY() + 16),
+                    surface.getZ() + 0.5, Set.<Relative>of(), 45, performance ? 12 : 40, true),
                     "Upper Sift screenshot placement failed");
             });
             context.waitFor(client -> client.level != null && client.level.dimension().equals(SIFT)
-                && client.player != null && client.player.getY() > 100, 1200);
-            world.getConnection().waitForChunksRender(1200);
+                && client.player != null && client.player.getY() > (performance ? 0 : 100), 1200);
+            waitForRenderedChunks(context, world, performance);
             context.waitTicks(4);
             report.put("upper_sift_screenshot", context.takeScreenshot("thenull-upper-sift").toString());
+            if (capture != null) capture.measure(context, world, report, "sift_upper");
             report.put("lighting", "CAPTURED: default Sift ambient light retained; screenshots require visual inspection and do not establish independent underground darkness");
             report.put("same_dimension_sky", "LIMITATION: the native Sift sky renderer remains shared; underground views at limited render distance may still show sky beyond rendered terrain");
             report.put("automated_result", "PASSED");
@@ -195,6 +213,33 @@ public final class ClientVerification implements FabricClientGameTest {
             require(client.getConnection() != null, "Client has no server connection");
             client.getConnection().sendCommand(command);
         });
+    }
+
+    private static void waitForRenderedChunks(ClientGameTestContext context, TestSingleplayerContext world, boolean performance) {
+        if (!performance) {
+            world.getConnection().waitForChunksRender(1200);
+            return;
+        }
+        // Fabric's strict helper requests a full square, but vanilla 26.3
+        // sends a rounded tracking area. At distance 8 its corner chunks will
+        // never arrive. Check the actual server tracking shape instead.
+        int[] attempts = {0};
+        context.waitFor(client -> {
+            if (client.level == null || client.player == null) return false;
+            var center = client.player.chunkPosition();
+            int distance = client.options.getEffectiveRenderDistance();
+            int missing = 0;
+            for (int z = -distance; z <= distance; z++) for (int x = -distance; x <= distance; x++) {
+                int cx = center.x() + x, cz = center.z() + z;
+                if (net.minecraft.server.level.ChunkTrackingView.isWithinDistance(center.x(), center.z(), distance, cx, cz, true)
+                    && client.level.getChunk(cx, cz, net.minecraft.world.level.chunk.status.ChunkStatus.FULL, false) == null) missing++;
+            }
+            if (attempts[0]++ % 200 == 0) System.out.println("NULL_RENDER_WAIT distance=" + distance
+                + " loaded=" + client.level.getChunkSource().getLoadedChunksCount() + " missing=" + missing
+                + " fps=" + client.getFps() + " center=" + center);
+            return missing == 0;
+        }, 1200);
+        world.getConnection().waitForChunksRender(false, 1200);
     }
 
     private static BlockPos safeSurface(ServerLevel level, BlockPos origin, int minimumFeetY) {

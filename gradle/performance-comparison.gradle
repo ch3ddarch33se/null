@@ -1,0 +1,87 @@
+/* Standalone, local-only performance control. AI-assisted, Apache-2.0. */
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import java.util.zip.ZipFile
+
+def comparisonResources = layout.buildDirectory.dir('generated/comparison-testmod')
+def metadataTask = tasks.register('comparisonMetadata') {
+    outputs.dir(comparisonResources)
+    doLast {
+        def directory = comparisonResources.get().asFile
+        directory.mkdirs()
+        new File(directory, 'fabric.mod.json').setText(JsonOutput.toJson([
+            schemaVersion: 1, id: 'thenull_comparison', version: '0.0.1',
+            name: 'The Null local performance comparison', license: 'Apache-2.0', environment: 'server',
+            entrypoints: [main: ['com.ch3ddarch33se.thenull.verification.ComparisonVerification']],
+            depends: [minecraft: '~26.3', java: '>=25', 'fabric-api': '*', sift_backport: '1.0.3.0']
+        ]) + '\n', 'UTF-8')
+    }
+}
+def testJar = tasks.register('comparisonJar', Jar) {
+    dependsOn tasks.named('verificationClasses'), metadataTask
+    archiveFileName = 'The-Null-comparison.jar'
+    destinationDirectory = layout.buildDirectory.dir('verification')
+    from(sourceSets.verification.output) {
+        include 'com/ch3ddarch33se/thenull/verification/ComparisonVerification*.class'
+    }
+    from(comparisonResources)
+}
+
+['runPerformanceComparison': true, 'runSiftControlServer': false].each { taskName, includeNull ->
+    tasks.register(taskName, JavaExec) {
+        group = 'verification'
+        description = includeNull ? 'Compare Overworld, upper Sift and Null performance.' : 'Benchmark unmodified external Sift Backport without The Null.'
+        dependsOn tasks.named('jar'), testJar
+        mainClass = 'net.fabricmc.loader.impl.launch.knot.KnotServer'
+        javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
+        maxHeapSize = '2G'
+        args 'nogui'
+        def label = includeNull ? 'with-null' : 'sift-control'
+        def report = layout.buildDirectory.file("reports/comparison-${label}.txt")
+        systemProperty 'fabric.development', 'false'
+        systemProperty 'thenull.comparisonReport', report.get().asFile.absolutePath
+        doFirst {
+            def siftJar = configurations.siftOverlayInput.singleFile
+            def apiJar = configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.find {
+                it.moduleVersion.id.group == 'net.fabricmc.fabric-api' && it.name == 'fabric-api'
+            }.file
+            def mods = [testJar.get().archiveFile.get().asFile, siftJar, apiJar]
+            if (includeNull) mods.add(tasks.named('jar', Jar).get().archiveFile.get().asFile)
+            def parser = new JsonSlurper()
+            classpath = files(sourceSets.verification.runtimeClasspath.files.findAll { candidate ->
+                if (!candidate.isFile() || !candidate.name.endsWith('.jar')) return false
+                boolean keep = true
+                new ZipFile(candidate).withCloseable { archive ->
+                    def metadata = archive.getEntry('fabric.mod.json')
+                    if (metadata != null) {
+                        def id = archive.getInputStream(metadata).withCloseable { parser.parse(it, 'UTF-8').id }
+                        keep = id in ['fabricloader', 'minecraft']
+                    }
+                }
+                keep
+            })
+            systemProperty 'fabric.addMods', mods.collect { it.absolutePath }.join(File.pathSeparator)
+            def directory = file("runs/comparison-${label}")
+            directory.mkdirs()
+            workingDir directory
+            new File(directory, 'eula.txt').setText('eula=true\n', 'UTF-8')
+            new File(directory, 'server.properties').setText("""level-name=comparison-${UUID.randomUUID()}
+level-seed=123456789
+online-mode=false
+server-ip=127.0.0.1
+server-port=0
+view-distance=2
+simulation-distance=2
+pause-when-empty-seconds=0
+max-tick-time=180000
+allow-flight=true
+""", 'UTF-8')
+            delete(report.get().asFile)
+        }
+        doLast {
+            if (!report.get().asFile.exists() || !report.get().asFile.getText('UTF-8').contains('automated_result = PASSED\n')) {
+                throw new GradleException("Comparison failed; inspect ${report.get().asFile}")
+            }
+        }
+    }
+}

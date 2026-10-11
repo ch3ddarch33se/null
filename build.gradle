@@ -10,6 +10,11 @@ base {
     archivesName = project.archives_base_name
 }
 
+def benchmarkLabel = providers.gradleProperty('benchmarkLabel').orElse('current').get()
+if (!(benchmarkLabel ==~ /[a-zA-Z0-9_-]+/)) {
+    throw new GradleException('benchmarkLabel must contain only letters, numbers, underscores or hyphens.')
+}
+
 repositories {
     maven { url = 'https://cursemaven.com' }
     mavenCentral()
@@ -78,6 +83,16 @@ loom {
             vmArg '-Dthenull.verificationReport=../../build/reports/verification.txt'
             programArg 'nogui'
         }
+        performanceServer {
+            server()
+            name 'The Null disposable performance server'
+            source sourceSets.verification
+            runDir 'runs/performance'
+            vmArg '-Xmx2G'
+            vmArg '-Dthenull.benchmark=true'
+            vmArg "-Dthenull.benchmarkLabel=${benchmarkLabel}"
+            programArg 'nogui'
+        }
         clientVerification {
             client()
             name 'The Null disposable client verification'
@@ -87,11 +102,22 @@ loom {
             vmArg '-Dfabric.client.gametest.modid=thenull_client_verification'
             vmArg '-Dthenull.clientVerificationReport=../../build/reports/client-verification.txt'
         }
+        clientPerformance {
+            client()
+            name 'The Null three-location client performance comparison'
+            source sourceSets.clientVerification
+            runDir 'runs/client-performance'
+            vmArg '-Dfabric.client.gametest'
+            vmArg '-Dfabric.client.gametest.modid=thenull_client_verification'
+            vmArg '-Dthenull.clientPerformance=true'
+            vmArg '-Dthenull.clientVerificationReport=../../build/reports/client-performance.txt'
+        }
     }
 }
 
 apply from: 'gradle/verification.gradle'
 apply from: 'gradle/packaged-verification.gradle'
+apply from: 'gradle/performance-comparison.gradle'
 
 tasks.withType(JavaCompile).configureEach {
     options.release = 25

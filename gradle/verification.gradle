@@ -33,3 +33,59 @@ tasks.named('runVerificationServer') {
         }
     }
 }
+
+tasks.register('preparePerformanceWorld') {
+    doLast {
+        def directory = file('runs/performance')
+        directory.mkdirs()
+        new File(directory, 'eula.txt').setText('eula=true\n', 'UTF-8')
+        new File(directory, 'server.properties').setText("""level-name=benchmark-${UUID.randomUUID()}
+level-seed=123456789
+online-mode=false
+server-ip=127.0.0.1
+server-port=0
+view-distance=2
+simulation-distance=2
+max-tick-time=180000
+pause-when-empty-seconds=0
+""", 'UTF-8')
+    }
+}
+tasks.named('runPerformanceServer') {
+    dependsOn tasks.named('preparePerformanceWorld')
+    doFirst {
+        delete(layout.buildDirectory.file("reports/performance-${providers.gradleProperty('benchmarkLabel').orElse('current').get()}.txt").get().asFile)
+    }
+    doLast {
+        def report = layout.buildDirectory.file("reports/performance-${providers.gradleProperty('benchmarkLabel').orElse('current').get()}.txt").get().asFile
+        if (!report.exists() || !report.getText('UTF-8').contains('automated_result = PASSED\n')) {
+            throw new GradleException("Benchmark failed; inspect ${report}")
+        }
+    }
+}
+
+tasks.register('verifyNullGeometry', JavaExec) {
+    group = 'verification'
+    description = 'Compare chunk order and flood-fill actual tunnel voxels without launching Minecraft.'
+    dependsOn tasks.named('verificationClasses')
+    classpath = sourceSets.verification.runtimeClasspath
+    mainClass = 'com.ch3ddarch33se.thenull.verification.GeometryVerification'
+    maxHeapSize = '1G'
+    systemProperty 'java.awt.headless', 'true'
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('verifyNullGeometry')
+}
+
+tasks.named('runClientPerformance') {
+    doFirst {
+        delete(layout.buildDirectory.file('reports/client-performance.txt').get().asFile)
+    }
+    doLast {
+        def report = layout.buildDirectory.file('reports/client-performance.txt').get().asFile
+        if (!report.exists() || !report.getText('UTF-8').contains('automated_result = PASSED\n')) {
+            throw new GradleException("Client comparison failed; inspect ${report}")
+        }
+    }
+}

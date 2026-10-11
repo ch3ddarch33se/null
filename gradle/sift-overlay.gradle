@@ -52,70 +52,9 @@ tasks.register('generateSiftOverlay') {
             throw new GradleException('Sift worldgen schema/height changed; refusing an unreviewed lower-world override.')
         }
 
-        def gradient = { int from, int to, Number low, Number high ->
-            [type: 'minecraft:gradient', axis: 'y', from_coordinate: from,
-             to_coordinate: to, from_value: low, to_value: high]
-        }
-        // An explicit coordinate gradient avoids depending on registry entries
-        // and reproduces the actual coordinate throughout this world.
-        def y = gradient(-768, 256, -768, 256)
-        def binary = { String type, a, b -> [type: "minecraft:${type}", left: a, right: b] }
-        def choose = { input, Number low, Number high, yes, no ->
-            [type: 'minecraft:range_choice', input: input, min_inclusive: low,
-             max_exclusive: high, when_in_range: yes, when_out_of_range: no]
-        }
-        def noise = { String name, Number xz, Number vertical ->
-            [type: 'minecraft:noise', noise: "thenull:${name}", xz_scale: xz, y_scale: vertical]
-        }
-        def absolute = { value -> [type: 'minecraft:abs', input: value] }
-        def below = { int height ->
-            [type: 'minecraft:not', invert: [type: 'minecraft:y_above',
-                anchor: [absolute: height], surface_depth_multiplier: 0, add_stone_depth: false]]
-        }
-        def above = { int height ->
-            [type: 'minecraft:y_above', anchor: [absolute: height],
-             surface_depth_multiplier: 0, add_stone_depth: false]
-        }
-        def block = { String id -> [type: 'minecraft:block', result_state: id] }
-        def condition = { predicate, rule -> [type: 'minecraft:condition', if_true: predicate, then_run: rule] }
-
-        def surface = binary('add', gradient(-390, -210, 1.9, -1.9),
-                binary('mul', 0.45, noise('surface_variation', 1.0, 0.0)))
-        // The maximum of two absolute noise fields creates narrow tubes near
-        // their intersection, rather than sheets or large noise caverns.
-        // Two such networks can intersect. Connectivity/width require playtests.
-        def cavePair = { String first, String second, Number threshold ->
-            binary('add', binary('max', absolute(noise(first, 1.4, 1.15)),
-                    absolute(noise(second, 1.4, 1.15))), -threshold)
-        }
-        def caveDensity = binary('min', cavePair('cave_primary', 'cave_secondary', 0.18),
-                cavePair('cave_tertiary', 'cave_quaternary', 0.17))
-        def terrain = binary('min', surface, caveDensity)
-        def lower = choose(y, -4, 0, 1.0,
-                choose(y, -256, -4, -1.0,
-                        choose(y, -768, -763, 1.0, terrain)))
-
-        // Only the selected final density changes above the new lower range;
-        // the original Sift density and all other routers remain byte-equivalent
-        // as parsed JSON values. The dimension and biome source are untouched.
-        def upperDensity = noiseSettings.noise_router.final_density
-        noiseSettings.noise_router.final_density = choose(y, 0, 257, upperDensity, lower)
-        noiseSettings.noise.min_y = -768
-        noiseSettings.noise.height = 1024
-        // The native global fluid picker supplies lava below min(-54, seaLevel)
-        // even when default_fluid is air. Place that cutoff below the playable
-        // range so the lower gap and cave passages remain air. The upper Sift
-        // already uses air as its fluid, so this preserves its empty spaces.
-        noiseSettings.sea_level = -768
-        def terrainMaterial = 'minecraft:sculk' // Future Abyssite Stone replacement point.
-        noiseSettings.material_rule = [type: 'minecraft:sequence', sequence: [
-            condition(below(0), [type: 'minecraft:sequence', sequence: [
-                condition(above(-4), block('minecraft:bedrock')),
-                condition(below(-763), block('minecraft:bedrock')),
-                block(terrainMaterial)
-            ]]),
-            noiseSettings.material_rule
-        ]]
+        // Keep Sift's original 0..255 generator, sea level, surface rules and
+        // density functions. The bounded Java terrain pass adds only Y<0.
+        // Expanding noise sampling to 1024 blocks caused measured chunk stalls.
         dimensionType.min_y = -768
         dimensionType.height = 1024
         dimensionType.logical_height = 1024
@@ -134,13 +73,6 @@ tasks.register('generateSiftOverlay') {
         writeJson('pack.mcmeta', [pack: [description: 'The Null: lower Sift terrain prototype',
                                      min_format: packFormat, max_format: packFormat]])
         writeJson('data/sift/dimension_type/sift.json', dimensionType)
-        writeJson('data/sift/worldgen/noise_settings/sift.json', noiseSettings)
-        writeJson('data/thenull/worldgen/noise/surface_variation.json',
-                [base_octave: -5, amplitudes: [1.0, 0.5, 0.25]])
-        ['cave_primary', 'cave_secondary', 'cave_tertiary', 'cave_quaternary'].each { name ->
-            writeJson("data/thenull/worldgen/noise/${name}.json",
-                    [base_octave: -3, amplitudes: [1.0, 0.5]])
-        }
         new File(packRoot, 'SIFT_ATTRIBUTION.txt').setText(
                 'Adapted world-generation JSON from Sift Backport 1.0.3.0 by DerexXD.\n' +
                 'Upstream Fabric metadata identifies the license as MIT.\n' +

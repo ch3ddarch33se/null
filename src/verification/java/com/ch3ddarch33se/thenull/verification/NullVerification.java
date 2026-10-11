@@ -7,6 +7,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Properties;
+import com.ch3ddarch33se.thenull.worldgen.TerrainShape;
+import com.ch3ddarch33se.thenull.worldgen.TunnelCarver;
 
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
@@ -45,7 +48,13 @@ public final class NullVerification implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        ServerLifecycleEvents.SERVER_STARTED.register(this::run);
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            if (Boolean.getBoolean("thenull.benchmark")) {
+                PerformanceVerification.start(server);
+            } else {
+                run(server);
+            }
+        });
     }
 
     private void run(MinecraftServer server) {
@@ -66,9 +75,9 @@ public final class NullVerification implements ModInitializer {
                 "min_y=" + overworld.getMinY() + ", height=" + overworld.getHeight() + ", max_y_inclusive=" + overworld.getMaxY());
             verifyOriginalUpperDensity(sift);
             verifyTerrain(sift);
+            verifyCaveConnectivity(sift);
             report.put("ambient_light", Float.toString(sift.dimensionType().ambientLight()));
             report.put("lighting_visibility", "NOT TESTED: requires a client; ambient light is retained from Sift");
-            report.put("cave_connectivity", "NOT TESTED: cave air counts and widths do not prove connectivity");
             report.put("null_enter", "NOT TESTED: command verification has not completed");
             report.put("null_leave", "NOT TESTED: command verification has not completed");
             report.putAll(TeleportVerification.run(server));
@@ -114,6 +123,8 @@ public final class NullVerification implements ModInitializer {
                 "Native original Sift settings decode failed: " + parsed.error()));
         }
         NoiseBasedChunkGenerator generator = (NoiseBasedChunkGenerator) level.getChunkSource().getGenerator();
+        check("upper_generator_bounds", generator.getMinY() == 0 && generator.getGenDepth() == 256,
+            "native_min_y=" + generator.getMinY() + ", native_generation_height=" + generator.getGenDepth());
         NoiseGeneratorSettings actualSettings = generator.generatorSettings().value();
         RandomState originalRandom = RandomState.create(level.registryAccess().lookupOrThrow(Registries.NOISE),
             level.getSeed(), originalSettings);
@@ -150,6 +161,15 @@ public final class NullVerification implements ModInitializer {
     }
 
     private void verifyTerrain(ServerLevel level) {
+        Properties baseline = new Properties();
+        try (var stream = getClass().getResourceAsStream("/sift-upper-baseline.properties")) {
+            if (stream == null) throw new IllegalStateException("Missing upper Sift baseline");
+            baseline.load(stream);
+        } catch (java.io.IOException error) { throw new java.io.UncheckedIOException(error); }
+        var shape = new TerrainShape(level.getSeed());
+        var carver = new TunnelCarver(level.getSeed());
+        long geometryWrong = 0;
+        int upperChanged = 0;
         long barrierWrong = 0;
         long gapWrong = 0;
         long materialWrong = 0;
@@ -170,6 +190,7 @@ public final class NullVerification implements ModInitializer {
             int startZ = coordinates[1] * 16;
             LOGGER.info("Verifying Sift chunk {}, {}", coordinates[0], coordinates[1]);
             LevelChunk chunk = level.getChunkAt(new BlockPos(startX, -300, startZ));
+            boolean[] expectedCaves = carver.carve(startX, startZ, 16, 16);
             int[][] columnSurfaces = new int[16][16];
             long upperHash = 0xcbf29ce484222325L;
             long lowerHash = 0xcbf29ce484222325L;
@@ -177,6 +198,7 @@ public final class NullVerification implements ModInitializer {
                 for (int localZ = 0; localZ < 16; localZ++) {
                     int x = startX + localX;
                     int z = startZ + localZ;
+                    int expectedSurface = shape.surface(x, z);
                     for (int y = -4; y <= -1; y++) {
                         if (!chunk.getBlockState(pos.set(x, y, z)).is(Blocks.BEDROCK)) {
                             barrierWrong++;
@@ -192,6 +214,13 @@ public final class NullVerification implements ModInitializer {
                     int surface = Integer.MIN_VALUE;
                     for (int y = -257; y >= -768; y--) {
                         BlockState state = chunk.getBlockState(pos.set(x, y, z));
+                        BlockState expected = y < TunnelCarver.MIN_Y ? Blocks.BEDROCK.defaultBlockState()
+                            : y > expectedSurface || expectedCaves[((y - TunnelCarver.MIN_Y) * 16 + localZ) * 16 + localX]
+                                ? Blocks.AIR.defaultBlockState() : Blocks.SCULK.defaultBlockState();
+                        if (state != expected) {
+                            geometryWrong++;
+                            recordFirst("geometry", pos, state);
+                        }
                         lowerHash ^= state.toString().hashCode();
                         lowerHash *= 0x100000001b3L;
                         if (!(state.isAir() || state.is(Blocks.SCULK)
@@ -268,9 +297,12 @@ public final class NullVerification implements ModInitializer {
                 }
             }
             report.put("upper_hash_" + coordinates[0] + "_" + coordinates[1], Long.toUnsignedString(upperHash, 16));
+            if (!Long.toUnsignedString(upperHash, 16).equals(baseline.getProperty(coordinates[0] + "," + coordinates[1]))) upperChanged++;
             report.put("lower_hash_" + coordinates[0] + "_" + coordinates[1], Long.toUnsignedString(lowerHash, 16));
         }
         check("barrier_continuous", barrierWrong == 0, "wrong_blocks=" + barrierWrong);
+        check("lower_geometry_matches", geometryWrong == 0, "native_chunk_vs_pure_geometry_mismatches=" + geometryWrong);
+        check("upper_sift_blocks_preserved", upperChanged == 0, "baseline_chunks=" + CHUNKS.length + ", changed=" + upperChanged);
         check("air_gap_empty", gapWrong == 0, "non_air_blocks=" + gapWrong);
         check("null_material", materialWrong == 0, "unexpected_blocks=" + materialWrong);
         check("lower_boundary", bottomWrong == 0, "missing_bottom_bedrock=" + bottomWrong);
@@ -294,6 +326,23 @@ public final class NullVerification implements ModInitializer {
         }
         report.put("cave_x_run_histogram", widths.toString());
         report.put("sample_chunks", Integer.toString(CHUNKS.length));
+    }
+
+    private void verifyCaveConnectivity(ServerLevel level) {
+        int size = 144, x0 = -96, z0 = -96;
+        int depth = TunnelCarver.MAX_Y - TunnelCarver.MIN_Y + 1;
+        boolean[] actualAir = new boolean[size * size * depth];
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        for (int cz = 0; cz < size; cz += 16) for (int cx = 0; cx < size; cx += 16) {
+            LevelChunk chunk = level.getChunkAt(new BlockPos(x0 + cx, -400, z0 + cz));
+            for (int y = 0; y < depth; y++) for (int z = 0; z < 16; z++) for (int x = 0; x < 16; x++) {
+                actualAir[(y * size + cz + z) * size + cx + x] = chunk.getBlockState(
+                    pos.set(x0 + cx + x, TunnelCarver.MIN_Y + y, z0 + cz + z)).isAir();
+            }
+        }
+        String result = GeometryVerification.connectivity(actualAir, new TerrainShape(level.getSeed()), x0, z0, size);
+        check("cave_connectivity", true, "actual Minecraft 144x144x507 voxel flood fill: " + result);
+        report.put("cave_connectivity_scope", "Six-neighbour air connectivity; clipped boundary fragments censored. Not a proof of player traversal or every seed.");
     }
 
     private void check(String name, boolean passed, String detail) {
