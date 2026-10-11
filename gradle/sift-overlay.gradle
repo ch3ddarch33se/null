@@ -1,0 +1,152 @@
+/*
+ * The Null's isolated Sift Backport compatibility layer.
+ * AI-assisted implementation, Apache-2.0; generated Sift data derives from
+ * Sift Backport 1.0.3.0 (MIT, author DerexXD in its Fabric metadata).
+ * The dependency JAR, classes, textures and other assets are never copied.
+ */
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import java.util.zip.ZipFile
+
+def outputDirectory = layout.buildDirectory.dir('generated/sift-overlay')
+
+tasks.register('generateSiftOverlay') {
+    group = 'build'
+    description = 'Generate an always-enabled, high-priority Sift dimension extension pack.'
+    inputs.files(configurations.siftOverlayInput)
+    inputs.file(file('gradle/sift-overlay.gradle'))
+    // Verified from Minecraft 26.3 version.json: data_major=121, data_minor=0.
+    inputs.property('dataPackFormat', providers.gradleProperty('null_datapack_format').orElse('121'))
+    outputs.dir(outputDirectory)
+
+    doLast {
+        def siftJars = configurations.siftOverlayInput.files.findAll { it.name.endsWith('.jar') }
+        if (siftJars.size() != 1) {
+            throw new GradleException("Expected exactly one Sift Backport input JAR, got ${siftJars.size()}")
+        }
+        def parser = new JsonSlurper()
+        def dimensionType
+        def noiseSettings
+        def metadata
+        new ZipFile(siftJars.first()).withCloseable { archive ->
+            def readJson = { String path ->
+                def entry = archive.getEntry(path)
+                if (entry == null) {
+                    throw new GradleException("Sift compatibility input is missing ${path}")
+                }
+                archive.getInputStream(entry).withCloseable { stream -> parser.parse(stream, 'UTF-8') }
+            }
+            metadata = readJson('fabric.mod.json')
+            if (metadata.id != 'sift_backport' || metadata.version != '1.0.3.0'
+                    || metadata.depends?.minecraft != '~26.3') {
+                throw new GradleException('Unsupported Sift Backport version; review the compatibility layer before updating it.')
+            }
+            dimensionType = readJson('data/sift/dimension_type/sift.json')
+            noiseSettings = readJson('data/sift/worldgen/noise_settings/sift.json')
+        }
+        if (dimensionType.min_y != 0 || dimensionType.height != 256 || dimensionType.logical_height != 256
+                || noiseSettings.noise?.min_y != 0 || noiseSettings.noise?.height != 256
+                || noiseSettings.default_fluid != 'minecraft:air'
+                || noiseSettings.material_rule != 'sift:sift'
+                || !(noiseSettings.noise_router?.final_density instanceof Map)) {
+            throw new GradleException('Sift worldgen schema/height changed; refusing an unreviewed lower-world override.')
+        }
+
+        def gradient = { int from, int to, Number low, Number high ->
+            [type: 'minecraft:gradient', axis: 'y', from_coordinate: from,
+             to_coordinate: to, from_value: low, to_value: high]
+        }
+        // An explicit coordinate gradient avoids depending on registry entries
+        // and reproduces the actual coordinate throughout this world.
+        def y = gradient(-768, 256, -768, 256)
+        def binary = { String type, a, b -> [type: "minecraft:${type}", left: a, right: b] }
+        def choose = { input, Number low, Number high, yes, no ->
+            [type: 'minecraft:range_choice', input: input, min_inclusive: low,
+             max_exclusive: high, when_in_range: yes, when_out_of_range: no]
+        }
+        def noise = { String name, Number xz, Number vertical ->
+            [type: 'minecraft:noise', noise: "thenull:${name}", xz_scale: xz, y_scale: vertical]
+        }
+        def absolute = { value -> [type: 'minecraft:abs', input: value] }
+        def below = { int height ->
+            [type: 'minecraft:not', invert: [type: 'minecraft:y_above',
+                anchor: [absolute: height], surface_depth_multiplier: 0, add_stone_depth: false]]
+        }
+        def above = { int height ->
+            [type: 'minecraft:y_above', anchor: [absolute: height],
+             surface_depth_multiplier: 0, add_stone_depth: false]
+        }
+        def block = { String id -> [type: 'minecraft:block', result_state: id] }
+        def condition = { predicate, rule -> [type: 'minecraft:condition', if_true: predicate, then_run: rule] }
+
+        def surface = binary('add', gradient(-390, -210, 1.9, -1.9),
+                binary('mul', 0.45, noise('surface_variation', 1.0, 0.0)))
+        // The maximum of two absolute noise fields creates narrow tubes near
+        // their intersection, rather than sheets or large noise caverns.
+        // Two such networks can intersect. Connectivity/width require playtests.
+        def cavePair = { String first, String second, Number threshold ->
+            binary('add', binary('max', absolute(noise(first, 1.4, 1.15)),
+                    absolute(noise(second, 1.4, 1.15))), -threshold)
+        }
+        def caveDensity = binary('min', cavePair('cave_primary', 'cave_secondary', 0.18),
+                cavePair('cave_tertiary', 'cave_quaternary', 0.17))
+        def terrain = binary('min', surface, caveDensity)
+        def lower = choose(y, -4, 0, 1.0,
+                choose(y, -256, -4, -1.0,
+                        choose(y, -768, -763, 1.0, terrain)))
+
+        // Only the selected final density changes above the new lower range;
+        // the original Sift density and all other routers remain byte-equivalent
+        // as parsed JSON values. The dimension and biome source are untouched.
+        def upperDensity = noiseSettings.noise_router.final_density
+        noiseSettings.noise_router.final_density = choose(y, 0, 257, upperDensity, lower)
+        noiseSettings.noise.min_y = -768
+        noiseSettings.noise.height = 1024
+        // The native global fluid picker supplies lava below min(-54, seaLevel)
+        // even when default_fluid is air. Place that cutoff below the playable
+        // range so the lower gap and cave passages remain air. The upper Sift
+        // already uses air as its fluid, so this preserves its empty spaces.
+        noiseSettings.sea_level = -768
+        def terrainMaterial = 'minecraft:sculk' // Future Abyssite Stone replacement point.
+        noiseSettings.material_rule = [type: 'minecraft:sequence', sequence: [
+            condition(below(0), [type: 'minecraft:sequence', sequence: [
+                condition(above(-4), block('minecraft:bedrock')),
+                condition(below(-763), block('minecraft:bedrock')),
+                block(terrainMaterial)
+            ]]),
+            noiseSettings.material_rule
+        ]]
+        dimensionType.min_y = -768
+        dimensionType.height = 1024
+        dimensionType.logical_height = 1024
+        // Keep Sift's skylight, ambient light and visual attributes. Independent
+        // darkness below Y=0 is a documented prototype limitation.
+
+        def generatedRoot = outputDirectory.get().asFile
+        delete(generatedRoot)
+        def packRoot = new File(generatedRoot, 'resourcepacks/null_extension')
+        def writeJson = { String path, value ->
+            def destination = new File(packRoot, path)
+            destination.parentFile.mkdirs()
+            destination.setText(JsonOutput.prettyPrint(JsonOutput.toJson(value)) + '\n', 'UTF-8')
+        }
+        def packFormat = providers.gradleProperty('null_datapack_format').orElse('121').get().toInteger()
+        writeJson('pack.mcmeta', [pack: [description: 'The Null: lower Sift terrain prototype',
+                                     min_format: packFormat, max_format: packFormat]])
+        writeJson('data/sift/dimension_type/sift.json', dimensionType)
+        writeJson('data/sift/worldgen/noise_settings/sift.json', noiseSettings)
+        writeJson('data/thenull/worldgen/noise/surface_variation.json',
+                [base_octave: -5, amplitudes: [1.0, 0.5, 0.25]])
+        ['cave_primary', 'cave_secondary', 'cave_tertiary', 'cave_quaternary'].each { name ->
+            writeJson("data/thenull/worldgen/noise/${name}.json",
+                    [base_octave: -3, amplitudes: [1.0, 0.5]])
+        }
+        new File(packRoot, 'SIFT_ATTRIBUTION.txt').setText(
+                'Adapted world-generation JSON from Sift Backport 1.0.3.0 by DerexXD.\n' +
+                'Upstream Fabric metadata identifies the license as MIT.\n' +
+                'Source: https://github.com/Derec-Mods/Sift-Backport/tree/main/fabric/26.3\n' +
+                'The input JAR does not contain a license file or copyright notice.\n' +
+                'No upstream Java classes, textures, or complete mod JAR are included.\n', 'UTF-8')
+        logger.lifecycle("Generated Sift extension pack at ${packRoot}")
+    }
+}

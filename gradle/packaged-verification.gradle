@@ -1,0 +1,96 @@
+/*
+ * AI-assisted production-JAR verification, Apache-2.0.
+ * Runs the real built mod through Fabric's production launcher. Test classes
+ * are packaged separately and never enter the distributable build/libs JAR.
+ */
+import groovy.json.JsonSlurper
+import java.util.zip.ZipFile
+
+def packagedReport = layout.buildDirectory.file('reports/packaged-verification.txt')
+
+def verificationJar = tasks.register('verificationJar', Jar) {
+    group = 'verification'
+    description = 'Package the local-only dedicated-server verification testmod.'
+    dependsOn tasks.named('verificationClasses')
+    archiveFileName = 'The-Null-verification.jar'
+    destinationDirectory = layout.buildDirectory.dir('verification')
+    from sourceSets.verification.output
+}
+
+tasks.register('runPackagedVerificationServer', JavaExec) {
+    group = 'verification'
+    description = 'Load the built mod JAR with production Fabric in a fresh disposable server world.'
+    dependsOn tasks.named('jar'), verificationJar
+    mainClass = 'net.fabricmc.loader.impl.launch.knot.KnotServer'
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+    maxHeapSize = '2G'
+    args 'nogui'
+    systemProperty 'fabric.development', 'false'
+    systemProperty 'thenull.verificationReport', packagedReport.get().asFile.absolutePath
+
+    doFirst {
+        def mainJar = tasks.named('jar', Jar).get().archiveFile.get().asFile
+        def testJar = verificationJar.get().archiveFile.get().asFile
+        def siftJar = configurations.siftOverlayInput.files.find { it.name.endsWith('.jar') }
+        def apiJar = configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.find {
+            it.moduleVersion.id.group == 'net.fabricmc.fabric-api' && it.name == 'fabric-api'
+        }?.file
+        if (siftJar == null || apiJar == null) {
+            throw new GradleException('Sift Backport and Fabric API must resolve before packaged verification.')
+        }
+
+        // Production discovery receives only actual mod JARs. Exclude all
+        // exploded source-set outputs and dependency mod JARs from the JVM
+        // classpath, leaving game/loader/support libraries. Fabric discovers
+        // the four mods below and loads Fabric API's nested modules itself.
+        def parser = new JsonSlurper()
+        def launcherLibraries = sourceSets.verification.runtimeClasspath.files.findAll { candidate ->
+            if (!candidate.isFile() || !candidate.name.endsWith('.jar')) {
+                return false
+            }
+            boolean keep = true
+            new ZipFile(candidate).withCloseable { archive ->
+                def metadata = archive.getEntry('fabric.mod.json')
+                if (metadata != null) {
+                    def id = archive.getInputStream(metadata).withCloseable { stream ->
+                        parser.parse(stream, 'UTF-8').id
+                    }
+                    keep = id in ['fabricloader', 'minecraft']
+                }
+            }
+            keep
+        }
+        classpath = files(launcherLibraries)
+        systemProperty 'fabric.addMods', [mainJar, testJar, siftJar, apiJar]
+            .collect { it.absolutePath }.join(File.pathSeparator)
+
+        def directory = file('runs/packaged-verification')
+        directory.mkdirs()
+        workingDir directory
+        def worldName = "world-null-packaged-${UUID.randomUUID()}"
+        new File(directory, 'eula.txt').setText('eula=true\n', 'UTF-8')
+        new File(directory, 'server.properties').setText("""level-name=${worldName}
+level-seed=123456789
+online-mode=false
+server-ip=127.0.0.1
+server-port=0
+view-distance=2
+simulation-distance=2
+max-players=4
+spawn-protection=0
+max-tick-time=180000
+allow-flight=true
+""", 'UTF-8')
+        delete(packagedReport.get().asFile)
+        logger.lifecycle("Production Fabric verification: ${mainJar.name}, fresh world ${worldName}")
+    }
+
+    doLast {
+        def report = packagedReport.get().asFile
+        if (!report.exists() || !report.getText('UTF-8').contains('automated_result = PASSED\n')) {
+            throw new GradleException("Packaged Minecraft verification failed; inspect ${report}")
+        }
+    }
+}

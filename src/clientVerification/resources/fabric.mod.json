@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "thenull_client_verification",
+  "version": "0.0.1",
+  "name": "The Null local client verification",
+  "environment": "client",
+  "license": "Apache-2.0",
+  "entrypoints": {
+    "fabric-client-gametest": [
+      "com.ch3ddarch33se.thenull.verification.ClientVerification"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "26.3",
+    "fabric-api": "*",
+    "thenull": "*"
+  }
+}

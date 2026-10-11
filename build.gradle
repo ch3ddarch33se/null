@@ -29,7 +29,7 @@ dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     implementation "net.fabricmc:fabric-loader:${project.loader_version}"
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
-    modImplementation siftArtifact
+    implementation siftArtifact
     siftOverlayInput siftArtifact
 }
 
@@ -42,20 +42,7 @@ sourceSets {
     }
 }
 
-tasks.register('generateSiftOverlay', Exec) {
-    inputs.files(configurations.siftOverlayInput)
-    inputs.file('tools/generate_sift_overlay.py')
-    outputs.dir(generatedSiftResources)
-    doFirst {
-        def siftJar = configurations.siftOverlayInput.files.find { it.name.endsWith('.jar') }
-        if (siftJar == null) {
-            throw new GradleException('Sift Backport 26.3 Fabric JAR was not resolved')
-        }
-        commandLine('python3', 'tools/generate_sift_overlay.py',
-            '--sift-jar', siftJar.absolutePath,
-            '--output', generatedSiftResources.get().asFile.absolutePath)
-    }
-}
+apply from: 'gradle/sift-overlay.gradle'
 
 tasks.named('processResources') {
     dependsOn tasks.named('generateSiftOverlay')
@@ -64,6 +51,47 @@ tasks.named('processResources') {
         expand 'version': project.version
     }
 }
+
+sourceSets {
+    verification {
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+    }
+    clientVerification {
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+    }
+}
+
+loom {
+    mods {
+        thenull { sourceSet sourceSets.main }
+        thenull_verification { sourceSet sourceSets.verification }
+        thenull_client_verification { sourceSet sourceSets.clientVerification }
+    }
+    runs {
+        verificationServer {
+            server()
+            name 'The Null disposable verification server'
+            source sourceSets.verification
+            runDir 'runs/verification'
+            vmArg '-Dthenull.verificationReport=../../build/reports/verification.txt'
+            programArg 'nogui'
+        }
+        clientVerification {
+            client()
+            name 'The Null disposable client verification'
+            source sourceSets.clientVerification
+            runDir 'runs/client-verification'
+            vmArg '-Dfabric.client.gametest'
+            vmArg '-Dfabric.client.gametest.modid=thenull_client_verification'
+            vmArg '-Dthenull.clientVerificationReport=../../build/reports/client-verification.txt'
+        }
+    }
+}
+
+apply from: 'gradle/verification.gradle'
+apply from: 'gradle/packaged-verification.gradle'
 
 tasks.withType(JavaCompile).configureEach {
     options.release = 25
@@ -75,9 +103,16 @@ java {
     targetCompatibility = JavaVersion.VERSION_25
 }
 
+tasks.named('sourcesJar') {
+    dependsOn tasks.named('generateSiftOverlay')
+}
+
 jar {
     from('LICENSE') {
         rename { "${it}_${project.base.archivesName.get()}" }
+    }
+    from('NOTICE') {
+        into('META-INF')
     }
     from('docs/THIRD_PARTY.md') {
         into('META-INF')

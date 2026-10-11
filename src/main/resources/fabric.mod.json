@@ -15,6 +15,6 @@
     "minecraft": "~26.3",
     "java": ">=25",
     "fabric-api": "*",
-    "sift_backport": ">=1.0.3.0"
+    "sift_backport": "1.0.3.0"
   }
 }

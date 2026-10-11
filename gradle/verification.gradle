@@ -1,0 +1,35 @@
+// Runs only in an ignored directory and always chooses a new world name.
+tasks.register('prepareVerificationWorld') {
+    group = 'verification'
+    description = 'Prepare a fresh disposable, loopback-only server world.'
+    doLast {
+        def directory = file('runs/verification')
+        directory.mkdirs()
+        def worldName = "world-null-${UUID.randomUUID()}"
+        new File(directory, 'eula.txt').setText('eula=true\n', 'UTF-8')
+        new File(directory, 'server.properties').setText("""level-name=${worldName}
+level-seed=123456789
+online-mode=false
+server-ip=127.0.0.1
+server-port=0
+view-distance=2
+simulation-distance=2
+max-players=4
+spawn-protection=0
+max-tick-time=180000
+allow-flight=true
+""", 'UTF-8')
+        delete(layout.buildDirectory.file('reports/verification.txt').get().asFile)
+        logger.lifecycle("Disposable verification world: ${worldName}")
+    }
+}
+
+tasks.named('runVerificationServer') {
+    dependsOn tasks.named('prepareVerificationWorld')
+    doLast {
+        def report = layout.buildDirectory.file('reports/verification.txt').get().asFile
+        if (!report.exists() || !report.getText('UTF-8').contains('automated_result = PASSED\n')) {
+            throw new GradleException("Minecraft verification failed; inspect ${report}")
+        }
+    }
+}

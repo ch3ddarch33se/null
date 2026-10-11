@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "thenull_verification",
+  "version": "0.0.1",
+  "name": "The Null Disposable World Verification",
+  "description": "Local test harness; never included in the distributed mod.",
+  "license": "Apache-2.0",
+  "environment": "server",
+  "entrypoints": {
+    "main": ["com.ch3ddarch33se.thenull.verification.NullVerification"]
+  },
+  "depends": {
+    "thenull": "*",
+    "sift_backport": "*",
+    "fabric-api": "*"
+  }
+}
