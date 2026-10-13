@@ -8,9 +8,7 @@ import java.util.concurrent.ConcurrentMap;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -23,8 +21,7 @@ import net.minecraft.world.phys.Vec3;
 
 /** Operator-only access to the buried Null terrain for disposable test worlds. */
 public final class NullTeleport {
-    private static final ResourceKey<Level> SIFT = ResourceKey.create(
-        Registries.DIMENSION, Identifier.parse("sift:sift"));
+    private static final ResourceKey<Level> SIFT = com.ch3ddarch33se.thenull.worldgen.WorldProvider.WORLD;
     // Development-only, in-memory return points, kept separately for each
     // player. A server restart simply falls back to a nearby Overworld surface.
     private static final ConcurrentMap<UUID, BlockPos> RETURN_POINTS = new ConcurrentHashMap<>();
@@ -61,7 +58,7 @@ public final class NullTeleport {
             }
         }
         source.sendFailure(Component.literal(
-            "No safe Null surface found. Confirm that the Sift worldgen overlay loaded; test in a fresh world."));
+            "No safe Null surface found. Test the native generator in a fresh world."));
         return 0;
     }
 
@@ -86,6 +83,28 @@ public final class NullTeleport {
         RETURN_POINTS.remove(player.getUUID());
         player.sendSystemMessage(Component.literal("Returned to the Overworld."));
         return 1;
+    }
+
+    public static int surface(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        var player = source.getPlayerOrException();
+        var level = source.getServer().getLevel(SIFT);
+        if (level == null) {
+            source.sendFailure(Component.literal("The Null's temporary Sift world is not loaded."));
+            return 0;
+        }
+        for (int x = 8; x <= 40; x += 4) for (int z = 8; z <= 40; z += 4) {
+            level.getChunkAt(new BlockPos(x, 0, z));
+            for (int y = 250; y >= 1; y--) {
+                var floor = new BlockPos(x, y, z);
+                if (isSafeFloor(level, floor)) {
+                    if (player.level().dimension().equals(Level.OVERWORLD)) RETURN_POINTS.put(player.getUUID(), player.blockPosition());
+                    teleport(player, level, floor.above());
+                    return 1;
+                }
+            }
+        }
+        source.sendFailure(Component.literal("No safe upper surface found near the development landing area."));
+        return 0;
     }
 
     private static BlockPos findSafeArrival(ServerLevel overworld, BlockPos origin) {

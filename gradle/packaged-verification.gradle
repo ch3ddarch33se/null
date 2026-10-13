@@ -33,18 +33,17 @@ tasks.register('runPackagedVerificationServer', JavaExec) {
     doFirst {
         def mainJar = tasks.named('jar', Jar).get().archiveFile.get().asFile
         def testJar = verificationJar.get().archiveFile.get().asFile
-        def siftJar = configurations.siftOverlayInput.files.find { it.name.endsWith('.jar') }
         def apiJar = configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.find {
             it.moduleVersion.id.group == 'net.fabricmc.fabric-api' && it.name == 'fabric-api'
         }?.file
-        if (siftJar == null || apiJar == null) {
-            throw new GradleException('Sift Backport and Fabric API must resolve before packaged verification.')
+        if (apiJar == null) {
+            throw new GradleException('Fabric API must resolve before packaged verification.')
         }
 
         // Production discovery receives only actual mod JARs. Exclude all
         // exploded source-set outputs and dependency mod JARs from the JVM
         // classpath, leaving game/loader/support libraries. Fabric discovers
-        // the four mods below and loads Fabric API's nested modules itself.
+        // the three mods below and loads Fabric API's nested modules itself.
         def parser = new JsonSlurper()
         def launcherLibraries = sourceSets.verification.runtimeClasspath.files.findAll { candidate ->
             if (!candidate.isFile() || !candidate.name.endsWith('.jar')) {
@@ -63,7 +62,7 @@ tasks.register('runPackagedVerificationServer', JavaExec) {
             keep
         }
         classpath = files(launcherLibraries)
-        systemProperty 'fabric.addMods', [mainJar, testJar, siftJar, apiJar]
+        systemProperty 'fabric.addMods', [mainJar, testJar, apiJar]
             .collect { it.absolutePath }.join(File.pathSeparator)
 
         def directory = file('runs/packaged-verification')

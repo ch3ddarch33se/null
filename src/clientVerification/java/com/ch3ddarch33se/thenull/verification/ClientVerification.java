@@ -29,7 +29,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 /** Local-only client checks using Fabric's game framebuffer and fresh test worlds. */
 public final class ClientVerification implements FabricClientGameTest {
     private static final ResourceKey<Level> SIFT = ResourceKey.create(
-        Registries.DIMENSION, Identifier.parse("sift:sift"));
+        Registries.DIMENSION, com.ch3ddarch33se.thenull.worldgen.WorldProvider.ID);
 
     @Override
     public void runTest(ClientGameTestContext context) {
@@ -45,6 +45,9 @@ public final class ClientVerification implements FabricClientGameTest {
                 settings.setDifficulty(Difficulty.PEACEFUL);
             }).create()) {
             report.put("world", world.getWorldSave().getSaveDirectory().toString());
+            require(!net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("sift_backport"),
+                "Standalone client verification unexpectedly loaded Sift Backport");
+            report.put("standalone_client", "PASSED: Sift Backport absent from Fabric's loaded mods");
             context.runOnClient(client -> {
                 client.options.renderDistance().set(performance ? 8 : 4);
                 client.options.simulationDistance().set(8);
@@ -84,7 +87,7 @@ public final class ClientVerification implements FabricClientGameTest {
             waitForRenderedChunks(context, world, performance);
             world.getServer().runOnServer(server -> {
                 ServerPlayer player = world.getConnection().getServerPlayer();
-                require(player.level().dimension().equals(SIFT), "Server player did not enter sift:sift");
+                require(player.level().dimension().equals(SIFT), "Server player did not enter thenull:sift");
                 require(player.level().getBlockState(player.blockPosition().below()).is(Blocks.SCULK),
                     "Real client command did not land on sculk");
                 require(player.level().noCollision(player, player.getBoundingBox()),
@@ -96,14 +99,39 @@ public final class ClientVerification implements FabricClientGameTest {
                 client.player.setXRot(12);
             });
             context.waitTicks(4);
-            report.put("null_enter", "PASSED: real client command packets, server transition, client sift:sift dimension, safe sculk landing, rendered destination chunks");
+            report.put("null_enter", "PASSED: real client command packets, server transition, client thenull:sift dimension, safe sculk landing, rendered destination chunks");
             report.put("null_surface_screenshot", context.takeScreenshot("thenull-null-surface").toString());
             if (capture != null) capture.measure(context, world, report, "null_surface");
+
+            var lichenSites = new java.util.Properties();
+            try (var reader = Files.newBufferedReader(Path.of("../../build/reports/terrain-inspection.properties"))) {
+                lichenSites.load(reader);
+            }
+            double lx=Double.parseDouble(lichenSites.getProperty("lichen_view.x"));
+            double ly=Double.parseDouble(lichenSites.getProperty("lichen_view.y"));
+            double lz=Double.parseDouble(lichenSites.getProperty("lichen_view.z"));
+            float lyaw=Float.parseFloat(lichenSites.getProperty("lichen_view.yaw"));
+            float lpitch=Float.parseFloat(lichenSites.getProperty("lichen_view.pitch"));
+            world.getServer().runOnServer(server -> {
+                ServerPlayer player=world.getConnection().getServerPlayer();
+                require(!player.hasEffect(MobEffects.NIGHT_VISION),"Native light inspection started with Night Vision");
+                require(player.teleportTo(player.level(),lx,ly,lz,Set.<Relative>of(),lyaw,lpitch,true),
+                    "Glow Lichen light inspection placement failed");
+                require(player.level().noCollision(player,player.getBoundingBox()),"Glow Lichen inspection landing collides");
+                require(player.level().getBlockState(player.blockPosition().below()).is(Blocks.SCULK),
+                    "Glow Lichen inspection landing has no natural sculk floor");
+            });
+            world.getConnection().waitForClientboundPackets();
+            waitForRenderedChunks(context,world,performance);
+            context.waitFor(client -> client.player!=null&&!client.player.hasEffect(MobEffects.NIGHT_VISION),1200);
+            context.waitTicks(8);
+            report.put("native_cave_lighting_screenshot","PASSED: Glow Lichen and exploration light rendered without Night Vision; position="
+                +lx+","+ly+","+lz+"; screenshot="+context.takeScreenshot("thenull-glow-lichen-native-light"));
 
             // Night vision is a temporary development inspection aid. Preserve
             // the native-light screenshot above and remove the effect before
             // photographing ordinary Sift lighting.
-            sendCommand(context, "effect give @s minecraft:night_vision 30 0 true");
+            sendCommand(context, "effect give @s minecraft:night_vision 120 0 true");
             context.waitFor(client -> client.player != null
                 && client.player.hasEffect(MobEffects.NIGHT_VISION), 1200);
             context.waitTicks(20);
@@ -143,6 +171,8 @@ public final class ClientVerification implements FabricClientGameTest {
                 report.put("cave_screenshot", "NOT TESTED: no local two-block-high cave landing in screenshot search area");
             }
 
+            if (Boolean.getBoolean("thenull.terrainInspection")) inspectTerrain(context,world,report,performance);
+
             sendCommand(context, "effect clear @s minecraft:night_vision");
             context.waitFor(client -> client.player != null
                 && !client.player.hasEffect(MobEffects.NIGHT_VISION), 1200);
@@ -160,15 +190,24 @@ public final class ClientVerification implements FabricClientGameTest {
             });
             report.put("null_leave", "PASSED: real client command packets and server/client transition back to a safe Overworld floor");
 
+            sendCommand(context, "null surface");
+            context.waitFor(client -> client.level != null && client.level.dimension().equals(SIFT)
+                && client.player != null && client.player.getY() > 0, 1200);
+            world.getServer().runOnServer(server -> {
+                var player=world.getConnection().getServerPlayer();
+                require(player.level().noCollision(player,player.getBoundingBox()), "Surface command intersects terrain");
+                require(player.level().getBlockState(player.blockPosition().below()).isFaceSturdy(player.level(),player.blockPosition().below(),Direction.UP), "Surface command lacks support");
+            });
+            report.put("null_surface", "PASSED: actual command packets and safe upper landing in thenull:sift");
+
             // A creative flight view above the ordinary Sift is solely for
             // visual comparison; it is independent of the development commands.
             world.getServer().runOnServer(server -> {
                 ServerPlayer player = world.getConnection().getServerPlayer();
                 ServerLevel sift = server.getLevel(SIFT);
                 require(sift != null, "Sift missing for upper screenshot");
-                // The Sift has large natural void regions near its origin.
-                // Seed 123456789's distant chunk (128,128) contains normal
-                // upper terrain, as verified by the dedicated-server sample.
+                // A distant region gives an additional terrain sample beyond
+                // the command landing area at the origin.
                 BlockPos surface = upperTerrain(sift);
                 player.getAbilities().flying = true;
                 player.onUpdateAbilities();
@@ -182,8 +221,8 @@ public final class ClientVerification implements FabricClientGameTest {
             context.waitTicks(4);
             report.put("upper_sift_screenshot", context.takeScreenshot("thenull-upper-sift").toString());
             if (capture != null) capture.measure(context, world, report, "sift_upper");
-            report.put("lighting", "CAPTURED: default Sift ambient light retained; screenshots require visual inspection and do not establish independent underground darkness");
-            report.put("same_dimension_sky", "LIMITATION: the native Sift sky renderer remains shared; underground views at limited render distance may still show sky beyond rendered terrain");
+            report.put("lighting", "CAPTURED: project-owned ambient light 0.04; native Glow Lichen cave screenshot has no Night Vision; separate geometry captures use development Night Vision");
+            report.put("same_dimension_sky", "LIMITATION: the vanilla sky renderer remains shared; underground views at limited render distance may still show sky beyond rendered terrain");
             report.put("automated_result", "PASSED");
         } catch (Throwable error) {
             StringWriter trace = new StringWriter();
@@ -213,6 +252,35 @@ public final class ClientVerification implements FabricClientGameTest {
             require(client.getConnection() != null, "Client has no server connection");
             client.getConnection().sendCommand(command);
         });
+    }
+
+    private static void inspectTerrain(ClientGameTestContext context, TestSingleplayerContext world,
+        Map<String,String> report, boolean performance) throws Exception {
+        var sites=new java.util.Properties();
+        try(var reader=Files.newBufferedReader(Path.of("../../build/reports/terrain-inspection.properties"))) {
+            sites.load(reader);
+        }
+        require(sites.getProperty("seed").equals("123456789"),"Inspection coordinates belong to another seed");
+        for(String name:new String[] {"dead_end","wide_passage","junction","surface_high","surface_low"}) {
+            double x=Double.parseDouble(sites.getProperty(name+".x")),y=Double.parseDouble(sites.getProperty(name+".y")),
+                z=Double.parseDouble(sites.getProperty(name+".z"));
+            float yaw=Float.parseFloat(sites.getProperty(name+".yaw")),pitch=Float.parseFloat(sites.getProperty(name+".pitch"));
+            boolean flight=name.startsWith("surface_");
+            world.getServer().runOnServer(server -> {
+                var player=world.getConnection().getServerPlayer();
+                require(player.level().getSeed()==123456789,"Inspection seed mismatch");
+                player.getAbilities().flying=flight;player.onUpdateAbilities();
+                require(player.teleportTo(player.level(),x,y,z,Set.<Relative>of(),yaw,pitch,true),"Inspection teleport failed: "+name);
+                require(player.level().noCollision(player,player.getBoundingBox()),"Inspection point intersects terrain: "+name);
+                if(!flight)require(player.level().getBlockState(player.blockPosition().below()).is(Blocks.SCULK),"Inspection floor missing: "+name);
+            });
+            world.getConnection().waitForClientboundPackets();
+            context.waitFor(client -> client.player!=null && Math.abs(client.player.getX()-x)<.1 && Math.abs(client.player.getZ()-z)<.1,1200);
+            waitForRenderedChunks(context,world,performance);
+            context.waitTicks(6);
+            report.put("inspection_"+name, "PASSED: rendered fresh-world geometry, collision/support verified; position="+x+","+y+","+z
+                +"; development night vision; screenshot="+context.takeScreenshot("thenull-inspection-"+name));
+        }
     }
 
     private static void waitForRenderedChunks(ClientGameTestContext context, TestSingleplayerContext world, boolean performance) {
@@ -268,7 +336,7 @@ public final class ClientVerification implements FabricClientGameTest {
                     int x = origin[0] + dx;
                     int z = origin[1] + dz;
                     level.getChunkAt(new BlockPos(x, 0, z));
-                    // Ash and other Sift surface blocks may have a partial
+                    // Vegetation and crystal surface blocks may have a partial
                     // collision shape. This is a flight view, so locate actual
                     // terrain directly instead of requiring a full floor face.
                     for (int y = 220; y >= 1; y--) {

@@ -1,0 +1,23 @@
+{
+  "noise": {
+    "min_y": -368,
+    "height": 112
+  },
+  "default_block": "minecraft:sculk",
+  "default_fluid": "minecraft:air",
+  "noise_router": {
+    "temperature": 0.0,
+    "vegetation": 0.0,
+    "continents": "minecraft:overworld/continents",
+    "erosion": "minecraft:overworld/erosion",
+    "depth": "thenull:null_depth",
+    "ridges": "minecraft:overworld/ridges",
+    "chunk_surface_level": -312.0,
+    "final_density": "thenull:null_geology"
+  },
+  "material_rule": "thenull:null",
+  "sea_level": -768,
+  "disable_mob_generation": true,
+  "legacy_random_source": false,
+  "spawn_target": []
+}

@@ -30,7 +30,7 @@ import net.minecraft.world.phys.Vec3;
 /** Exercises registered commands against real server player and level objects. */
 public final class TeleportVerification {
     private static final ResourceKey<Level> SIFT = ResourceKey.create(
-        Registries.DIMENSION, Identifier.parse("sift:sift"));
+        Registries.DIMENSION, com.ch3ddarch33se.thenull.worldgen.WorldProvider.ID);
 
     private TeleportVerification() { }
 
@@ -69,11 +69,16 @@ public final class TeleportVerification {
             leave(server, second, secondOrigin);
             require(first.level().dimension().equals(SIFT),
                 "Leaving with one player changed another player's dimension");
+            int surfaceResult = server.getCommands().getDispatcher().execute("null surface", operatorSource(first));
+            require(surfaceResult == 1 && first.level().dimension().equals(SIFT) && first.getY() > 0,
+                "/null surface did not reach the upper region in the same world");
+            verifyLanding(first);
             leave(server, first, firstOrigin);
 
             return Map.of(
-                "null_enter", "PASSED: registered command moved two server players into sift:sift onto exposed sculk, with clear headroom and reset motion/fall distance",
+                "null_enter", "PASSED: registered command moved two server players into thenull:sift onto exposed sculk, with clear headroom and reset motion/fall distance",
                 "null_leave", "PASSED: registered command returned both server players to their original safe Overworld positions",
+                "null_surface", "PASSED: safe upper landing in the same dimension, retaining the original Overworld return point",
                 "permissions", "PASSED: non-operator source could not use /null and command execution was rejected",
                 "multiplayer", "PASSED: distinct player UUIDs retained independent return positions; teleporting one did not move the other",
                 "teleport_client", "NOT TESTED: synthetic server players queue packets without a connected Minecraft client; rendering and client handshake are not exercised");
@@ -101,7 +106,7 @@ public final class TeleportVerification {
         player.fallDistance = 55;
         int result = server.getCommands().getDispatcher().execute("null enter", operatorSource(player));
         require(result == 1, "/null enter did not report success");
-        require(player.level().dimension().equals(SIFT), "/null enter left the player outside sift:sift");
+        require(player.level().dimension().equals(SIFT), "/null enter left the player outside thenull:sift");
         require(player.getY() < -250 && player.getY() > -440,
             "/null enter placed the player outside the exposed Null surface range");
         require(player.level().getBlockState(player.blockPosition().below()).is(Blocks.SCULK),

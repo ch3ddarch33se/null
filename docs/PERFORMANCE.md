@@ -1,4 +1,13 @@
-# Tunnel-path revision — measured validation, 2026-10-11
+# Performance records
+
+Current terrain-refinement benchmarks and their limitations are recorded in
+[TERRAIN_REFINEMENT.md](TERRAIN_REFINEMENT.md); the original native/standalone
+milestone is in [NATIVE_REFACTOR.md](NATIVE_REFACTOR.md). The following preserves the measured
+0.0.2 tunnel-path history for comparison; it describes the external Sift provider.
+The current dense-cave openness and performance results are recorded in
+[CAVE_ECOSYSTEM.md](CAVE_ECOSYSTEM.md).
+
+## Tunnel-path revision — measured validation, 2026-10-11
 
 The first in-game feedback identified slow performance, periodic-looking
 surface terrain and excessively hollow caves. This revision replaces the lower

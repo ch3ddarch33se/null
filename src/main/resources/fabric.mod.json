@@ -3,7 +3,7 @@
   "id": "thenull",
   "version": "${version}",
   "name": "The Null",
-  "description": "Early prototype of a hidden Sculk world beneath the Sift.",
+  "description": "Experimental standalone alien surface and connected Sculk geology in one world.",
   "authors": ["Tianran Yu"],
   "license": "Apache-2.0",
   "environment": "*",
@@ -15,7 +15,6 @@
     "fabricloader": ">=0.19.5",
     "minecraft": "~26.3",
     "java": ">=25",
-    "fabric-api": "*",
-    "sift_backport": "1.0.3.0"
+    "fabric-api": "*"
   }
 }

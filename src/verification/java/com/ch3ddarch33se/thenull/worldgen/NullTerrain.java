@@ -33,7 +33,7 @@ public final class NullTerrain {
             lowest = Math.min(lowest, heights[z * 16 + x]);
         }
         long shaped = PROFILE ? System.nanoTime() : 0;
-        boolean[] caves = new TunnelCarver(seed).carve(x0, z0, 16, 16);
+        boolean[] caves = new BaselineTunnelCarver(seed, new TerrainShape(seed)::surface).carve(x0, z0, 16, 16);
         long carved = PROFILE ? System.nanoTime() : 0;
         LevelChunkSection[] sections = chunk.getSections();
         for (int sectionY = -48; sectionY < 0; sectionY++) {
