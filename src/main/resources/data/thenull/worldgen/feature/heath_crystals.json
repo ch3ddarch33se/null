@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:simple_block",
+  "to_place": {
+    "type": "minecraft:weighted",
+    "entries": [
+      {
+        "data": "minecraft:amethyst_cluster",
+        "weight": 2
+      },
+      {
+        "data": "minecraft:small_amethyst_bud",
+        "weight": 7
+      },
+      {
+        "data": "minecraft:pearlescent_froglight",
+        "weight": 1
+      }
+    ]
+  }
+}

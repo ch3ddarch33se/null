@@ -89,3 +89,17 @@ tasks.named('runClientPerformance') {
         }
     }
 }
+
+tasks.register('verifyEcosystemGeometry', JavaExec) {
+    group = 'verification'
+    description = 'Check dense caves, cavern connectivity and deterministic borders without launching Minecraft.'
+    dependsOn tasks.named('verificationClasses')
+    classpath = sourceSets.verification.runtimeClasspath
+    mainClass = 'com.ch3ddarch33se.thenull.verification.EcosystemGeometryVerification'
+    maxHeapSize = '1G'
+    systemProperty 'java.awt.headless', 'true'
+    systemProperty 'thenull.ecosystemScale', providers.gradleProperty('ecosystemScale').orElse('1.00').get()
+    systemProperty 'thenull.ecosystemSize', providers.gradleProperty('ecosystemSize').orElse('128').get()
+}
+
+tasks.named('check') { dependsOn tasks.named('verifyEcosystemGeometry') }

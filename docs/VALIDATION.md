@@ -1,5 +1,8 @@
 # Initial v0.0.1 validation — historical results, 2026-10-11
 
+The standalone 0.0.3-dev validation is recorded in
+[NATIVE_REFACTOR.md](NATIVE_REFACTOR.md). This file preserves earlier results.
+
 The results below describe the original noise-density prototype before the
 first in-game feedback. The current tunnel-path revision, performance results,
 real-chunk connectivity tests and limitations are documented in

@@ -16,41 +16,16 @@ if (!(benchmarkLabel ==~ /[a-zA-Z0-9_-]+/)) {
 }
 
 repositories {
-    maven { url = 'https://cursemaven.com' }
     mavenCentral()
-}
-
-// A local copy is optional. It is never bundled into The Null.
-def localSiftJar = file('libs/Sift-Backport-1.0.3.0-26.3-fabric.jar')
-def siftArtifact = localSiftJar.exists()
-    ? files(localSiftJar)
-    : 'curse.maven:sift-backport-1714907:9045257'
-
-configurations {
-    siftOverlayInput
 }
 
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     implementation "net.fabricmc:fabric-loader:${project.loader_version}"
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
-    implementation siftArtifact
-    siftOverlayInput siftArtifact
 }
-
-// Build a tiny resource override from the selected Sift Backport jar. The
-// original mod jar is only read as an input; it is not redistributed here.
-def generatedSiftResources = layout.buildDirectory.dir('generated/sift-overlay')
-sourceSets {
-    main {
-        resources.srcDir(generatedSiftResources)
-    }
-}
-
-apply from: 'gradle/sift-overlay.gradle'
 
 tasks.named('processResources') {
-    dependsOn tasks.named('generateSiftOverlay')
     inputs.property('version', project.version)
     filesMatching('fabric.mod.json') {
         expand 'version': project.version
@@ -110,6 +85,9 @@ loom {
             vmArg '-Dfabric.client.gametest'
             vmArg '-Dfabric.client.gametest.modid=thenull_client_verification'
             vmArg '-Dthenull.clientPerformance=true'
+            if (providers.gradleProperty('terrainInspection').isPresent()) {
+                vmArg '-Dthenull.terrainInspection=true'
+            }
             vmArg '-Dthenull.clientVerificationReport=../../build/reports/client-performance.txt'
         }
     }
@@ -117,7 +95,6 @@ loom {
 
 apply from: 'gradle/verification.gradle'
 apply from: 'gradle/packaged-verification.gradle'
-apply from: 'gradle/performance-comparison.gradle'
 
 tasks.withType(JavaCompile).configureEach {
     options.release = 25
@@ -129,9 +106,6 @@ java {
     targetCompatibility = JavaVersion.VERSION_25
 }
 
-tasks.named('sourcesJar') {
-    dependsOn tasks.named('generateSiftOverlay')
-}
 
 jar {
     from('LICENSE') {

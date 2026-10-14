@@ -5,7 +5,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import com.ch3ddarch33se.thenull.worldgen.NullTerrain;
+import com.ch3ddarch33se.thenull.worldgen.NativeNullTerrain;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
@@ -28,7 +28,7 @@ final class PerformanceVerification {
 
     private PerformanceVerification(MinecraftServer server) {
         this.server = server;
-        level = server.getLevel(ResourceKey.create(Registries.DIMENSION, Identifier.parse("sift:sift")));
+        level = server.getLevel(com.ch3ddarch33se.thenull.worldgen.WorldProvider.WORLD);
         if (level == null) throw new IllegalStateException("Missing Sift");
     }
 
@@ -85,7 +85,7 @@ final class PerformanceVerification {
                     .append("generation_tick = ").append(stats(generationTicks)).append('\n')
                     .append("loaded_tick = ").append(stats(loadedTicks)).append('\n')
                     .append("cached_request = ").append(stats(cachedRequests)).append('\n')
-                    .append("lower_pass = ").append(NullTerrain.benchmarkSummary()).append('\n')
+                    .append("lower_pass = ").append(NativeNullTerrain.benchmarkSummary()).append('\n')
                     .append("client_fps = NOT MEASURED: headless server\n")
                     .append("scope = includes neighbour generation and lighting; not isolated noise-task CPU; loaded ticks are not multiplayer load\n")
                     .append("automated_result = PASSED\n");

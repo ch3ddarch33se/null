@@ -1,0 +1,28 @@
+{
+  "has_precipitation": false,
+  "temperature": 0.6,
+  "downfall": 0.3,
+  "effects": {
+    "water_color": "#35c6bf"
+  },
+  "attributes": {
+    "minecraft:visual/fog_color": "#6ab2b6",
+    "minecraft:visual/sky_color": "#809fd6"
+  },
+  "carvers": [],
+  "features": [
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [
+      "thenull:grove_sprouts"
+    ],
+    []
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "type": "minecraft:interpolated",
+  "cell_size_xz": 4,
+  "cell_size_y": 4,
+  "input": {
+    "type": "minecraft:add",
+    "left": {
+      "type": "minecraft:gradient",
+      "axis": "y",
+      "from_coordinate": 16,
+      "to_coordinate": 184,
+      "from_value": 3.6,
+      "to_value": -3.6
+    },
+    "right": {
+      "type": "minecraft:add",
+      "left": {
+        "type": "minecraft:mul",
+        "left": {
+          "type": "minecraft:noise",
+          "noise": "thenull:relief",
+          "xz_scale": 0.85,
+          "y_scale": 0.5
+        },
+        "right": 2.3
+      },
+      "right": {
+        "type": "minecraft:mul",
+        "left": {
+          "type": "minecraft:noise",
+          "noise": "thenull:folds",
+          "xz_scale": 0.7,
+          "y_scale": 1.5
+        },
+        "right": 1.05
+      }
+    }
+  }
+}

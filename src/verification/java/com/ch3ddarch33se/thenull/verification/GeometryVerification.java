@@ -2,6 +2,7 @@ package com.ch3ddarch33se.thenull.verification;
 
 import com.ch3ddarch33se.thenull.worldgen.TerrainShape;
 import com.ch3ddarch33se.thenull.worldgen.TunnelCarver;
+import com.ch3ddarch33se.thenull.worldgen.BaselineTunnelCarver;
 import java.awt.image.BufferedImage;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,7 +23,7 @@ public final class GeometryVerification {
         var report = new StringBuilder();
         for (long seed : new long[] {123456789, 0, -1, 987654321}) {
             int x0 = -96, z0 = -96;
-            var carver = new TunnelCarver(seed);
+            var carver = new BaselineTunnelCarver(seed, new TerrainShape(seed)::surface);
             boolean[] whole = carver.carve(x0, z0, SIZE, SIZE);
             if (seed == 123456789) cavePlan(whole);
             List<int[]> chunks = new ArrayList<>();
@@ -47,7 +48,31 @@ public final class GeometryVerification {
                 .append(" mismatches=0 ").append(connectivity(whole, new TerrainShape(seed), x0, z0, SIZE)).append('\n');
         }
         surfaceMap(report);
-        report.append("connectivity_scope = six-neighbour cave AIR in four 144x144x507 voxel windows, boundary fragments censored; not proof of player traversal or every seed\n");
+        // Common multiple of the old 48- and new 40-block owner cells. A
+        // small window cutting through nodes can exclude their connections.
+        int nativeSize = 240, nativeOrigin = -240;
+        for (long seed : new long[] {123456789, 0, -1, 987654321}) {
+            boolean[] baseline = new BaselineTunnelCarver(seed).carve(nativeOrigin,nativeOrigin,nativeSize,nativeSize);
+            report.append("baseline_native_seed=").append(seed).append(' ')
+                .append(connectivity(baseline,(x,z)->-350,nativeOrigin,nativeOrigin,nativeSize)).append('\n');
+            var carver = new TunnelCarver(seed, (x,z) -> -258);
+            var paths = new ArrayList<TunnelCarver.CavePath>();
+            boolean[] whole = carver.carve(nativeOrigin,nativeOrigin,nativeSize,nativeSize,paths::add);
+            long comparisons=0;
+            for(int cz=0;cz<nativeSize;cz+=16) for(int cx=0;cx<nativeSize;cx+=16) {
+                boolean[] part=carver.carve(nativeOrigin+cx,nativeOrigin+cz,16,16);
+                for(int y=0;y<DEPTH;y++) for(int z=0;z<16;z++) for(int x=0;x<16;x++) {
+                    if(part[(y*16+z)*16+x]!=whole[(y*nativeSize+cz+z)*nativeSize+cx+x]) throw new AssertionError("Native graph boundary mismatch");
+                    comparisons++;
+                }
+            }
+            report.append("native_seed=").append(seed).append(" comparisons=").append(comparisons)
+                .append(" mismatches=0 ").append(connectivity(whole,(x,z)->-350,nativeOrigin,nativeOrigin,nativeSize)).append('\n');
+            report.append("native_variety_seed=").append(seed).append(' ')
+                .append(CaveGeometryVerification.verify(whole,paths,nativeOrigin,nativeOrigin,nativeSize)).append('\n');
+            if(seed==123456789) cavePlan(whole,nativeSize);
+        }
+        report.append("connectivity_scope = four legacy 144x144x507 windows, plus matched baseline/refined 240x240x507 windows aligned with both owner grids; boundary fragments censored; not a global connectivity proof\n");
         report.append("automated_result = PASSED\n");
         Files.createDirectories(Path.of("build/reports"));
         Files.writeString(Path.of("build/reports/geometry.txt"), report);
@@ -55,11 +80,15 @@ public final class GeometryVerification {
     }
 
     static String connectivity(boolean[] air, TerrainShape shape, int x0, int z0, int size) {
+        return connectivity(air,shape::surface,x0,z0,size);
+    }
+
+    static String connectivity(boolean[] air, java.util.function.IntBinaryOperator surface, int x0, int z0, int size) {
         int plane = size * size;
         // Only underground air; exposed outside air cannot join separate caves.
         long rockCells = 0;
         for (int z = 0; z < size; z++) for (int x = 0; x < size; x++) {
-            int ceiling = shape.surface(x0 + x, z0 + z) - 10;
+            int ceiling = surface.applyAsInt(x0 + x, z0 + z) - 10;
             for (int y = 0; y < DEPTH; y++) {
                 if (y + TunnelCarver.MIN_Y >= ceiling) air[y * plane + z * size + x] = false;
                 else rockCells++;
@@ -69,16 +98,22 @@ public final class GeometryVerification {
         int[] queue = new int[air.length];
         int components = 0, isolatedComponents = 0, largest = 0, total = 0;
         long isolatedVoxels = 0;
+        String isolatedExample = "";
+        long lastIsolatedSize=0;
+        String lastIsolatedBounds="";
         for (int index = 0; index < air.length; index++) {
             if (!air[index] || visited[index]) continue;
             int head = 0, tail = 1;
             queue[0] = index; visited[index] = true;
             boolean boundary = false;
+            int minX=size,maxX=0,minZ=size,maxZ=0,minY=DEPTH,maxY=0;
             while (head < tail) {
                 int current = queue[head++];
                 int x = current % size, z = current / size % size, y = current / plane;
+                minX=Math.min(minX,x);maxX=Math.max(maxX,x);minZ=Math.min(minZ,z);maxZ=Math.max(maxZ,z);
+                minY=Math.min(minY,y);maxY=Math.max(maxY,y);
                 if (x == 0 || z == 0 || x == size - 1 || z == size - 1
-                    || y + TunnelCarver.MIN_Y >= shape.surface(x0 + x, z0 + z) - 11) boundary = true;
+                    || y + TunnelCarver.MIN_Y >= surface.applyAsInt(x0 + x, z0 + z) - 11) boundary = true;
                 if (x > 0) tail = visit(current - 1, air, visited, queue, tail);
                 if (x + 1 < size) tail = visit(current + 1, air, visited, queue, tail);
                 if (z > 0) tail = visit(current - size, air, visited, queue, tail);
@@ -87,10 +122,17 @@ public final class GeometryVerification {
                 if (y + 1 < DEPTH) tail = visit(current + plane, air, visited, queue, tail);
             }
             components++; total += tail; largest = Math.max(largest, tail);
-            if (!boundary) { isolatedComponents++; isolatedVoxels += tail; }
+            if (!boundary) {
+                isolatedComponents++; isolatedVoxels += tail;
+                isolatedExample = (x0+index%size)+","+(TunnelCarver.MIN_Y+index/plane)+","+(z0+index/size%size);
+                lastIsolatedSize=tail;
+                lastIsolatedBounds="x="+(maxX-minX)+",y="+(maxY-minY)+",z="+(maxZ-minZ);
+            }
         }
         if (total == 0 || isolatedComponents > 0 || largest < total * .95) {
-            throw new AssertionError("Isolated cave components=" + isolatedComponents + ", voxels=" + isolatedVoxels);
+            throw new AssertionError("Cave connectivity: isolated components=" + isolatedComponents + ", isolated voxels=" + isolatedVoxels
+                + ", largest=" + largest + "/" + total + ", components=" + components+", example="+isolatedExample
+                +", isolated_size="+lastIsolatedSize+", bounds="+lastIsolatedBounds);
         }
         return String.format(Locale.ROOT,
             "air_voxels=%d rock_volume=%d air_percent=%.3f components=%d largest_percent=%.3f interior_isolated_components=%d",
@@ -103,11 +145,15 @@ public final class GeometryVerification {
     }
 
     private static void cavePlan(boolean[] air) throws Exception {
+        cavePlan(air,SIZE);
+    }
+
+    private static void cavePlan(boolean[] air,int size) throws Exception {
         int scale = 4;
-        var image = new BufferedImage(SIZE * scale, SIZE * scale, BufferedImage.TYPE_INT_RGB);
-        for (int z = 0; z < SIZE; z++) for (int x = 0; x < SIZE; x++) {
+        var image = new BufferedImage(size * scale, size * scale, BufferedImage.TYPE_INT_RGB);
+        for (int z = 0; z < size; z++) for (int x = 0; x < size; x++) {
             boolean tunnel = false;
-            for (int y = -390; y <= -350; y++) tunnel |= air[((y - TunnelCarver.MIN_Y) * SIZE + z) * SIZE + x];
+            for (int y = -405; y <= -350; y++) tunnel |= air[((y - TunnelCarver.MIN_Y) * size + z) * size + x];
             int color = tunnel ? 0x63c5ba : 0x141d25;
             for (int dz = 0; dz < scale; dz++) for (int dx = 0; dx < scale; dx++) image.setRGB(x * scale + dx, z * scale + dz, color);
         }

@@ -1,0 +1,61 @@
+{
+  "type": "minecraft:range_choice",
+  "input": {
+    "type": "minecraft:gradient",
+    "axis": "y",
+    "from_coordinate": -368,
+    "to_coordinate": -256,
+    "from_value": -368.0,
+    "to_value": -256.0
+  },
+  "min_inclusive": -352.0,
+  "max_exclusive": -269.0,
+  "when_in_range": {
+    "type": "minecraft:squeeze",
+    "input": {
+      "type": "minecraft:interpolated",
+      "cell_size_xz": 4,
+      "cell_size_y": 8,
+      "input": {
+        "type": "minecraft:lerp",
+        "alpha": {
+          "type": "minecraft:gradient",
+          "axis": "y",
+          "from_coordinate": -352,
+          "to_coordinate": -340,
+          "from_value": 0.0,
+          "to_value": 1.0
+        },
+        "first": 1.0,
+        "second": {
+          "type": "minecraft:lerp",
+          "alpha": {
+            "type": "minecraft:gradient",
+            "axis": "y",
+            "from_coordinate": -284,
+            "to_coordinate": -270,
+            "from_value": 1.0,
+            "to_value": 0.0
+          },
+          "first": -1.0,
+          "second": "thenull:null_sloped_cheese"
+        }
+      }
+    }
+  },
+  "when_out_of_range": {
+    "type": "minecraft:range_choice",
+    "input": {
+      "type": "minecraft:gradient",
+      "axis": "y",
+      "from_coordinate": -368,
+      "to_coordinate": -256,
+      "from_value": -368.0,
+      "to_value": -256.0
+    },
+    "min_inclusive": -1000000.0,
+    "max_exclusive": -352.0,
+    "when_in_range": 1.0,
+    "when_out_of_range": -1.0
+  }
+}

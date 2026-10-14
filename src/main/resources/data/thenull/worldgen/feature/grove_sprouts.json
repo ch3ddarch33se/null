@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:simple_block",
+  "to_place": {
+    "type": "minecraft:weighted",
+    "entries": [
+      {
+        "data": "minecraft:warped_roots",
+        "weight": 7
+      },
+      {
+        "data": "minecraft:warped_fungus",
+        "weight": 2
+      },
+      {
+        "data": "minecraft:crimson_roots",
+        "weight": 1
+      }
+    ]
+  }
+}

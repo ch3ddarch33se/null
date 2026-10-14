@@ -1,5 +1,25 @@
 # Third-party compatibility and attributions
 
+## Current standalone development build
+
+The playable 0.0.3-dev JAR contains original The Null Java/world-generation data
+and references vanilla blocks. It contains no Sift Backport dependency, overlay,
+source, textures, models or sounds. Existing project attribution and licenses
+remain intact. The original heightmap/section-fill implementation is confined
+to local verification sources and excluded from the playable JAR.
+
+[Mielon's The Sift](https://www.curseforge.com/minecraft/mc-mods/mielons-the-sift)
+was consulted only for the requested high-level visual direction. Its code,
+artwork, structures, biome layouts and distinctive designs were not copied.
+No new bitmap artwork was produced or borrowed. Original Abyssite Stone and
+environmental artwork remain future assets for Tianran Yu/the project artists.
+
+## Historical external-backport attribution
+
+The following records the earlier prototype. The files it describes are
+preserved under `comparison/v0.0.2` and in the baseline archive; its redistribution
+considerations do not describe the new standalone JAR.
+
 The Null does not bundle Sift Backport's JAR, Java classes, textures, models, or
 artwork. Sift Backport **1.0.3.0 for Fabric 26.3** is a required external mod.
 

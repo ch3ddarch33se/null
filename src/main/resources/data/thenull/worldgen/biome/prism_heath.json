@@ -1,0 +1,28 @@
+{
+  "has_precipitation": false,
+  "temperature": 0.6,
+  "downfall": 0.3,
+  "effects": {
+    "water_color": "#705fcc"
+  },
+  "attributes": {
+    "minecraft:visual/fog_color": "#a39bc7",
+    "minecraft:visual/sky_color": "#b29cdb"
+  },
+  "carvers": [],
+  "features": [
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [
+      "thenull:heath_crystals"
+    ],
+    []
+  ]
+}

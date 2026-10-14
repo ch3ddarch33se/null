@@ -1,0 +1,35 @@
+{
+  "noise": {
+    "min_y": 0,
+    "height": 256
+  },
+  "default_block": "minecraft:stone",
+  "default_fluid": "minecraft:air",
+  "noise_router": {
+    "vegetation": 0.0,
+    "continents": 0.0,
+    "erosion": 0.0,
+    "ridges": 0.0,
+    "temperature": {
+      "type": "minecraft:noise",
+      "noise": "thenull:climate",
+      "xz_scale": 1,
+      "y_scale": 0
+    },
+    "depth": {
+      "type": "minecraft:gradient",
+      "axis": "y",
+      "from_coordinate": -256,
+      "to_coordinate": -128,
+      "from_value": 1,
+      "to_value": 0
+    },
+    "chunk_surface_level": 96.0,
+    "final_density": "thenull:upper_geology"
+  },
+  "material_rule": "thenull:upper",
+  "sea_level": 0,
+  "disable_mob_generation": true,
+  "legacy_random_source": false,
+  "spawn_target": []
+}

@@ -1,0 +1,21 @@
+{
+  "min_y": -768,
+  "height": 1024,
+  "logical_height": 1024,
+  "has_skylight": true,
+  "has_ceiling": false,
+  "has_ender_dragon_fight": false,
+  "coordinate_scale": 1.0,
+  "ambient_light": 0.04,
+  "infiniburn": "#minecraft:infiniburn_overworld",
+  "monster_spawn_block_light_limit": 0,
+  "monster_spawn_light_level": 0,
+  "default_clock": "minecraft:overworld",
+  "attributes": {
+    "minecraft:visual/fog_color": "#83a5bd",
+    "minecraft:visual/sky_color": "#9a9fd0",
+    "minecraft:visual/cloud_height": 224.0,
+    "minecraft:visual/cloud_color": "#bbaabbd0",
+    "minecraft:gameplay/respawn_anchor_works": false
+  }
+}

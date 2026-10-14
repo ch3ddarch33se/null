@@ -11,7 +11,6 @@
   },
   "depends": {
     "thenull": "*",
-    "sift_backport": "*",
     "fabric-api": "*"
   }
 }

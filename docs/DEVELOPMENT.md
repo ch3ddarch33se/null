@@ -1,4 +1,35 @@
-# The Null v0.0.1 development
+# Development
+
+The current build is **0.0.3-dev**, an independent native-generation prototype.
+Use Minecraft 26.3, Java 25, Fabric Loader 0.19.5 and Fabric API 0.161.0+26.3.
+It requires no Sift Backport and uses `thenull:sift` for both regions.
+
+```sh
+export JAVA_HOME="$(/usr/libexec/java_home -v 25)"
+export GRADLE_USER_HOME="$PWD/.gradle-user-home"
+./gradlew build
+./gradlew runVerificationServer
+./gradlew runPackagedVerificationServer
+./gradlew runPerformanceServer -PbenchmarkLabel=local
+./gradlew runClientPerformance
+```
+
+Tests create new disposable worlds under ignored `runs`; reports are under
+`build/reports`. The playable JAR is `build/libs/The-Null-0.0.3-dev.jar`.
+Commands are `/null enter`, `/null surface`, `/null leave`, restricted to operators.
+See [native refactor notes](NATIVE_REFACTOR.md) for architecture and actual results.
+For the latest lower-surface results, see
+[terrain refinement](TERRAIN_REFINEMENT.md); for dense underground caves, see
+[the cave ecosystem record](CAVE_ECOSYSTEM.md). After packaged-server verification,
+`./gradlew runClientPerformance -PterrainInspection` captures its verified
+dead-end, wide-passage, junction and surface inspection sites in one client run.
+Old `sift:sift` world data is not migrated; use new worlds. Do not run `clean`
+until you have copied local benchmark/milestone archives out of `build`.
+
+## Historical 0.0.1/0.0.2 development record
+
+The following preserves the earlier external-backport implementation. Its
+dependency, artifacts and commands describe that version, not the current build.
 
 This prototype extends **the existing `sift:sift` dimension**. It does not
 register a separate Null dimension. Use fresh disposable worlds: changing an
