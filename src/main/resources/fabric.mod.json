@@ -3,7 +3,7 @@
   "id": "thenull",
   "version": "${version}",
   "name": "The Null",
-  "description": "Experimental standalone alien surface and connected Sculk geology in one world.",
+  "description": "Alpha build with an original Sift-like surface and a vast Sculk chamber in one world.",
   "authors": ["Tianran Yu"],
   "license": "Apache-2.0",
   "environment": "*",

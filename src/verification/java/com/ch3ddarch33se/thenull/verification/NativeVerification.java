@@ -7,6 +7,7 @@ import com.ch3ddarch33se.thenull.worldgen.TunnelCarver;
 import com.ch3ddarch33se.thenull.worldgen.CaveSettings;
 import com.ch3ddarch33se.thenull.worldgen.CaveSystem;
 import com.ch3ddarch33se.thenull.worldgen.CavernCarver;
+import com.ch3ddarch33se.thenull.worldgen.CentralChamber;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
@@ -28,7 +29,7 @@ final class NativeVerification {
         try {
             var level = server.getLevel(key);
             require(level != null, "Missing world provider");
-            require(level.getMinY() == -768 && level.getMaxY() == 255, "Incorrect dimension bounds");
+            require(level.getMinY() == -1760 && level.getMaxY() == 255, "Incorrect dimension bounds");
             boolean standalone=level.getChunkSource().getGenerator() instanceof com.ch3ddarch33se.thenull.worldgen.LayeredChunkGenerator;
             var caveSettings=CaveSettings.load();
             var caveSystem=new CaveSystem(level.getSeed(),caveSettings);
@@ -38,7 +39,7 @@ final class NativeVerification {
                 report.put("standalone_server","PASSED: native thenull:sift loaded without Sift Backport or legacy dimension");
             }
             long solid = 0, caveAir = 0;
-            int min = 0, max = -768;
+            int min = 0, max = -1760;
             int upperMin=256,upperMax=0;
             var upperBiomes=new java.util.HashSet<String>();
             long decorations=0, materialSamples=0;
@@ -48,15 +49,18 @@ final class NativeVerification {
                 int x0 = cp[0]*16, z0 = cp[1]*16;
                 boolean[] caves = caveSystem.carve(x0-1,z0-1,18,18);
                 for (int z=0;z<16;z++) for (int x=0;x<16;x++) {
-                    int top = -768;
-                    for (int y=-768;y<0;y++) {
+                    int top = -1760;
+                    boolean centralColumn = CentralChamber.containsColumn(x0 + x, z0 + z);
+                    for (int y=-1760;y<0;y++) {
                         var state = chunk.getBlockState(pos.set(x0+x,y,z0+z));
-                        if (y < -763 || y >= -4) require(state.is(Blocks.BEDROCK), "Bedrock hole at "+pos);
-                        else if (y >= -269) require(state.isAir(), "Gap is not empty at "+pos);
+                        if (y <= CentralChamber.BEDROCK_MAX_Y || y >= -4) require(state.is(Blocks.BEDROCK), "Bedrock hole at "+pos);
+                        else if (y >= -256) require(state.isAir(), "Gap is not empty at "+pos);
                         else {
-                            require(state.isAir() || state.is(Blocks.SCULK) || state.is(Blocks.GLOW_LICHEN), "Unexpected lower material at "+pos);
+                            require(state.isAir() || state.is(Blocks.SCULK) || state.is(Blocks.GLOW_LICHEN)
+                                || state.is(Blocks.TINTED_GLASS), "Unexpected lower material at "+pos);
                             if (state.is(Blocks.SCULK)) { solid++; top=y; }
-                            if (y < -368) {
+                            if (y >= TunnelCarver.MIN_Y && y < -368
+                                && !(centralColumn && y >= CentralChamber.AIR_MIN_Y && y <= CentralChamber.AIR_MAX_Y)) {
                                 boolean expected = caves[((y+763)*18+z+1)*18+x+1];
                                 boolean open=state.isAir()||state.is(Blocks.GLOW_LICHEN);
                                 require(open==expected, "Deep connected graph changed at "+pos);
@@ -64,8 +68,10 @@ final class NativeVerification {
                             }
                         }
                     }
-                    require(top >= -352 && top <= -270, "Surface outside preserved envelope: "+top);
-                    min=Math.min(min,top); max=Math.max(max,top);
+                    if (!centralColumn) {
+                        require(top >= -352 && top <= -270, "Surface outside preserved envelope at "+(x0+x)+","+(z0+z)+": "+top);
+                        min=Math.min(min,top); max=Math.max(max,top);
+                    }
                     require(level.getBrightness(LightLayer.SKY,pos.set(x0+x,-128,z0+z))==0,"Skylight below barrier");
                     if(standalone) {
                         require(level.getBiome(pos.set(x0+x,-400,z0+z)).unwrapKey().orElseThrow().identifier().toString().equals("thenull:null_depths"),"Lower biome is not native Null depths");
@@ -83,6 +89,7 @@ final class NativeVerification {
                     }
                 }
             }
+            if (standalone) verifyCentralChamber(level);
             require(max-min>8, "Flat lower surface");
             report.put("native_geology", "PASSED: actual chunks; surface range="+min+".."+max+", sculk="+solid+", deep graph air="+caveAir);
             report.put("constraints", "PASSED: bottom bedrock, continuous separator, air gap, zero gap skylight, exact deep graph voxels");
@@ -105,6 +112,7 @@ final class NativeVerification {
                 }
             }
             report.putAll(TeleportVerification.run(server));
+            report.put("block_timers", com.ch3ddarch33se.thenull.BlockTimerVerification.run(level));
             report.put("native_density", verifyDensity(level));
             report.put("automated_result", "PASSED");
         } catch (Throwable e) {
@@ -128,18 +136,34 @@ final class NativeVerification {
         if(!condition) throw new AssertionError(message);
     }
 
+    private static void verifyCentralChamber(ServerLevel level) {
+        level.getChunk(0, 0);
+        level.getChunk(350 >> 4, 0);
+        for (int y = CentralChamber.MIN_Y; y <= CentralChamber.BEDROCK_MAX_Y; y++) {
+            require(level.getBlockState(new BlockPos(0, y, 0)).is(Blocks.BEDROCK), "Bottom bedrock boundary is open at Y=" + y);
+        }
+        require(level.getBlockState(new BlockPos(0, CentralChamber.FLOOR_Y, 0)).is(Blocks.SCULK), "Central chamber floor is not solid Sculk");
+        require(level.getBlockState(new BlockPos(0, -1700, 0)).isAir(), "Central chamber did not carve its lower volume");
+        require(level.getBlockState(new BlockPos(0, -600, 0)).isAir(), "Central chamber did not reach the Null surface");
+        require(level.getBlockState(new BlockPos(0, -1460, 0)).is(Blocks.TINTED_GLASS), "Energy Orb lower tip is missing");
+        require(level.getBlockState(new BlockPos(0, -880, 0)).isAir(), "Energy Orb incorrectly filled its interior");
+        require(level.getBlockState(new BlockPos(350, -880, 0)).is(Blocks.TINTED_GLASS), "Energy Orb does not fill the chamber width");
+        require(level.getBlockState(new BlockPos(0, -300, 0)).is(Blocks.TINTED_GLASS), "Energy Orb upper tip is missing");
+        require(level.getBlockState(new BlockPos(351, -880, 0)).is(Blocks.SCULK), "Chamber exceeded its 700-block diameter");
+    }
+
     private record EcosystemSample(boolean[] underground,java.util.List<TunnelCarver.CavePath> paths,int origin,int size) { }
 
     private static EcosystemSample verifyEcosystem(ServerLevel level,CaveSystem caves,LinkedHashMap<String,String> report,
         BlockPos.MutableBlockPos pos,java.util.Properties sites) {
-        final int size=240,origin=-240,depth=TunnelCarver.MAX_Y-TunnelCarver.MIN_Y+1,plane=size*size;
+        final int size=240,origin=400,depth=TunnelCarver.MAX_Y-TunnelCarver.MIN_Y+1,plane=size*size;
         boolean[] actual=new boolean[plane*depth];int[] undergroundCeiling=new int[plane];
         long lichen=0,wallLichen=0,floorLichen=0,checkedFaces=0,brightLichen=0;
         BlockPos litSource=null,litLanding=null;int brightestLanding=0,validated=0;
         for(int cz=0;cz<size;cz+=16)for(int cx=0;cx<size;cx+=16) {
             var chunk=level.getChunk((origin+cx)/16,(origin+cz)/16);
             for(int z=0;z<16;z++)for(int x=0;x<16;x++) {
-                int wx=origin+cx+x,wz=origin+cz+z,column=(cz+z)*size+cx+x,top=-768;
+                int wx=origin+cx+x,wz=origin+cz+z,column=(cz+z)*size+cx+x,top=-1760;
                 for(int y=-368;y<=-270;y++)if(chunk.getBlockState(pos.set(wx,y,wz)).is(Blocks.SCULK))top=y;
                 require(top>=-352&&top<=-270,"Lower surface not found in ecosystem sample at "+wx+","+wz+": "+top);
                 undergroundCeiling[column]=top-10;
@@ -230,8 +254,9 @@ final class NativeVerification {
         var ends=CaveGeometryVerification.deadEnds(air,paths,origin,origin,size);
         ends.sort(order);
         require(ends.stream().anyMatch(p -> caveSite(level,p,"dead_end",sites,true)),"No safe verified dead-end inspection site");
-        var wide=paths.stream().filter(p -> p.maxWidth()>6 && p.end().y()<-385 && p.end().x()>origin+10 && p.end().x()<-10
-            && p.end().z()>origin+10 && p.end().z()<-10).sorted(order).toList();
+        var wide=paths.stream().filter(p -> p.maxWidth()>6 && p.end().y()<-385
+            && p.end().x()>origin+10 && p.end().x()<origin+size-10
+            && p.end().z()>origin+10 && p.end().z()<origin+size-10).sorted(order).toList();
         require(wide.stream().anyMatch(p -> caveSite(level,p,"wide_passage",sites,true)),"No safe wide inspection site");
         require(wide.stream().anyMatch(p -> caveSite(level,p,"junction",sites,false)),"No safe junction inspection site");
     }
@@ -284,6 +309,8 @@ final class NativeVerification {
             boolean[] caves = new TunnelCarver(level.getSeed()).carve(x0, z0, 16, 16);
             for (int x : new int[] {0,8,15}) for (int z : new int[] {0,8,15}) {
                 for (int y = -368; y < -256; y++) {
+                    if (CentralChamber.containsColumn(x0 + x, z0 + z)
+                        && y >= CentralChamber.AIR_MIN_Y && y <= CentralChamber.AIR_MAX_Y) continue;
                     float density = lowerRandom.sampleBlockValueUncached(lower.noiseRouter().finalDensity(), x0+x, y, z0+z);
                     boolean expectedAir = density <= 0 || caves[((y - TunnelCarver.MIN_Y) * 16 + z) * 16 + x];
                     require(chunk.getBlockState(pos.set(x0+x, y, z0+z)).isAir() == expectedAir,

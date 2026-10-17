@@ -14,11 +14,13 @@ public final class EcosystemGeometryVerification {
     public static void main(String[] args) throws Exception {
         int size=Integer.getInteger("thenull.ecosystemSize",128),origin=-size;
         var report=new StringBuilder();
-        double scale=Double.parseDouble(System.getProperty("thenull.ecosystemScale","1.00"));
+        double scale=Double.parseDouble(System.getProperty("thenull.ecosystemScale","1.12"));
         var settings=new CaveSettings(scale,CaveSettings.DEFAULT.wallLichen(),CaveSettings.DEFAULT.floorLichen());
         report.append("cavern_scale=").append(scale).append('\n');
         for(long seed:new long[]{123456789,0,-1,987654321}) {
             var system=new CaveSystem(seed,settings);
+            verifyChamberRoofSlice(system);
+            report.append("central_chamber_roof_slice=PASSED: four locations match the full cave mask above Y=-300\n");
             var paths=new ArrayList<TunnelCarver.CavePath>();
             var rooms=new ArrayList<CavernCarver.Room>();
             long start=System.nanoTime();
@@ -44,5 +46,18 @@ public final class EcosystemGeometryVerification {
         report.append("scope = provisional constant Y=-310 underground ceiling; includes protected roof; no gap/sky; server measures actual density-defined rock volume\nautomated_result = PASSED\n");
         Files.createDirectories(Path.of("build/reports"));Files.writeString(Path.of("build/reports/ecosystem-geometry.txt"),report);
         System.out.print(report);
+    }
+
+    private static void verifyChamberRoofSlice(CaveSystem system) {
+        for(int[] chunk:new int[][] {{0,0},{20,0},{14,14},{-14,-14}}) {
+            int x=chunk[0]*16-1,z=chunk[1]*16-1;
+            boolean[] full=system.carve(x,z,18,18);
+            boolean[] roof=system.carveAboveCentralChamber(x,z,18,18);
+            for(int y=-300;y<=TunnelCarver.MAX_Y;y++)for(int iz=0;iz<18;iz++)for(int ix=0;ix<18;ix++) {
+                boolean expected=full[((y-TunnelCarver.MIN_Y)*18+iz)*18+ix];
+                boolean actual=roof[((y+300)*18+iz)*18+ix];
+                if(expected!=actual)throw new AssertionError("Central chamber roof slice mismatch at "+(x+ix)+","+y+","+(z+iz));
+            }
+        }
     }
 }

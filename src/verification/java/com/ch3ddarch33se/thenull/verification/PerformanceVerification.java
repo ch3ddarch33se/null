@@ -16,6 +16,7 @@ import net.minecraft.world.level.Level;
 
 /** AI-assisted benchmark, deliberately excluded from the distributed mod. */
 final class PerformanceVerification {
+    private static final int[][] CHAMBER_CHUNKS = chamberChunks();
     private final MinecraftServer server;
     private final ServerLevel level;
     private final List<Long> requests = new ArrayList<>();
@@ -41,12 +42,12 @@ final class PerformanceVerification {
     private void beforeTick(MinecraftServer ignored) {
         start = System.nanoTime();
         if (finished) return;
-        // Four warm-up requests followed by 32 measured, non-overlapping FULL
-        // requests. Each includes its required generation neighbours and light.
+        // Four warm-up requests followed by 32 measured FULL requests distributed
+        // inside the new chamber, so this run measures the actual Alpha workload.
         if (tick >= 10 && tick < 46) {
             int index = tick - 10;
-            int x = 256 + index * 8;
-            int z = 256 + ((index * 17) % 37) * 8;
+            int x = CHAMBER_CHUNKS[index][0];
+            int z = CHAMBER_CHUNKS[index][1];
             long requested = System.nanoTime();
             level.getChunk(x, z);
             long elapsed = System.nanoTime() - requested;
@@ -60,7 +61,8 @@ final class PerformanceVerification {
         }
         if (tick >= 70 && tick < 170) {
             long requested = System.nanoTime();
-            level.getChunk(536, 280); // final request's coordinates, already FULL
+                int[] finalChunk = CHAMBER_CHUNKS[35];
+                level.getChunk(finalChunk[0], finalChunk[1]); // final request, already FULL
             cachedRequests.add(System.nanoTime() - requested);
         }
     }
@@ -80,7 +82,7 @@ final class PerformanceVerification {
                 StringBuilder text = new StringBuilder("seed = 123456789\njava = ")
                     .append(System.getProperty("java.version")).append("\nprocessors = ")
                     .append(Runtime.getRuntime().availableProcessors()).append('\n')
-                    .append("method = 4 warmup + 32 fresh FULL chunk requests, one per tick; 100 loaded ticks, one forced chunk; no players\n")
+                    .append("method = 4 warmup + 32 fresh FULL chunk requests inside radius-20 chunk units of the central chamber; 100 loaded ticks, one forced chamber chunk; no players\n")
                     .append("fresh_request = ").append(stats(requests)).append('\n')
                     .append("generation_tick = ").append(stats(generationTicks)).append('\n')
                     .append("loaded_tick = ").append(stats(loadedTicks)).append('\n')
@@ -99,6 +101,15 @@ final class PerformanceVerification {
                 server.halt(false);
             }
         }
+    }
+
+    private static int[][] chamberChunks() {
+        var positions = new ArrayList<int[]>();
+        for (int z = -18; z <= 18; z += 6) for (int x = -18; x <= 18; x += 6) {
+            if (x * x + z * z <= 20 * 20) positions.add(new int[] {x, z});
+        }
+        if (positions.size() < 36) throw new IllegalStateException("Insufficient chamber benchmark positions");
+        return positions.subList(0, 36).toArray(int[][]::new);
     }
 
     private static String csv(List<Long> values) {

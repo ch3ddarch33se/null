@@ -1,6 +1,6 @@
 # Development
 
-The current build is **0.0.3-dev**, an independent native-generation prototype.
+The current build is **0.0.4**, an independent native-generation release.
 Use Minecraft 26.3, Java 25, Fabric Loader 0.19.5 and Fabric API 0.161.0+26.3.
 It requires no Sift Backport and uses `thenull:sift` for both regions.
 
@@ -15,8 +15,13 @@ export GRADLE_USER_HOME="$PWD/.gradle-user-home"
 ```
 
 Tests create new disposable worlds under ignored `runs`; reports are under
-`build/reports`. The playable JAR is `build/libs/The-Null-0.0.3-dev.jar`.
+`build/reports`. The playable JAR is `build/libs/The-Null-0.0.4.jar`.
 Commands are `/null enter`, `/null surface`, `/null leave`, restricted to operators.
+Version 0.0.4 expands the same dimension to Y=-1760 and adds a 700-block central
+chamber. Its orb uses vanilla tinted glass in a vertically stretched ellipsoid:
+the requested 700-block diameter and Y=-1460..-300 span cannot form a sphere.
+Do not reuse older test saves after the dimension-height change. The benchmark
+task samples fresh chunk requests within the new chamber radius.
 See [native refactor notes](NATIVE_REFACTOR.md) for architecture and actual results.
 For the latest lower-surface results, see
 [terrain refinement](TERRAIN_REFINEMENT.md); for dense underground caves, see

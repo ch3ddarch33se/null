@@ -1,8 +1,11 @@
 package com.ch3ddarch33se.thenull.verification;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
+import com.ch3ddarch33se.thenull.NullPortal;
+import com.ch3ddarch33se.thenull.PlayerData;
 import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
@@ -22,7 +25,9 @@ import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.server.permissions.PermissionSet;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Relative;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
@@ -61,7 +66,30 @@ public final class TeleportVerification {
 
             enter(server, first);
             BlockPos firstNullPosition = first.blockPosition();
+            PlayerData.Origin saved = PlayerData.origin(first);
+            require(saved != null && saved.dimension().equals("minecraft:overworld")
+                && saved.x() == firstOrigin.getX() + 0.5 && saved.y() == firstOrigin.getY()
+                && saved.z() == firstOrigin.getZ() + 0.5,
+                "Entry did not persist the player's exact origin in PlayerData");
+            require(PlayerData.RETURN_ORIGIN.isPersistent(), "Player origin attachment is not serialized to NBT");
+            ServerLevel sift = server.getLevel(SIFT);
+            var lowerSpawn = new ServerPlayer.RespawnConfig(
+                LevelData.RespawnData.of(SIFT, new BlockPos(20, -800, 20), 0.0F, 0.0F), false);
+            first.setRespawnPosition(lowerSpawn, false);
+            require(first.getRespawnConfig() == null, "A Null bed/anchor spawn was accepted");
+            var upperSpawn = new ServerPlayer.RespawnConfig(
+                LevelData.RespawnData.of(SIFT, new BlockPos(20, 100, 20), 0.0F, 0.0F), false);
+            first.setRespawnPosition(upperSpawn, false);
+            require(first.getRespawnConfig() != null && first.getRespawnConfig().respawnData().pos().getY() == 100,
+                "The Null spawn restriction also blocked upper Sift spawn points");
+            require(NullPortal.isIntact(sift), "Arrival did not create the main portal");
+            sift.setBlock(new BlockPos(1, NullPortal.Y, 0), Blocks.AIR.defaultBlockState(), 3);
+            require(!NullPortal.isIntact(sift), "The main portal is not breakable");
+            int strandedResult = server.getCommands().getDispatcher().execute("null leave", operatorSource(first));
+            require(strandedResult == 0 && first.level().dimension().equals(SIFT),
+                "A broken main portal did not strand existing Null players");
             enter(server, second);
+            require(NullPortal.isIntact(sift), "A new Overworld arrival did not regenerate the main portal");
             require(first.level().dimension().equals(SIFT)
                 && first.blockPosition().equals(firstNullPosition),
                 "Entering with another player changed the first player");
@@ -74,11 +102,14 @@ public final class TeleportVerification {
                 "/null surface did not reach the upper region in the same world");
             verifyLanding(first);
             leave(server, first, firstOrigin);
+            verifyDeathExperience(server, first, server.getLevel(SIFT));
 
             return Map.of(
                 "null_enter", "PASSED: registered command moved two server players into thenull:sift onto exposed sculk, with clear headroom and reset motion/fall distance",
-                "null_leave", "PASSED: registered command returned both server players to their original safe Overworld positions",
+                "null_leave", "PASSED: exact per-player origins returned; breaking the central portal stranded current players and a new Overworld arrival regenerated it",
                 "null_surface", "PASSED: safe upper landing in the same dimension, retaining the original Overworld return point",
+                "respawn_rules", "PASSED: lower Null spawn points are rejected while upper Sift spawn points remain allowed",
+                "death_experience", "PASSED: death below the separator clears level, total experience and progress before drops",
                 "permissions", "PASSED: non-operator source could not use /null and command execution was rejected",
                 "multiplayer", "PASSED: distinct player UUIDs retained independent return positions; teleporting one did not move the other",
                 "teleport_client", "NOT TESTED: synthetic server players queue packets without a connected Minecraft client; rendering and client handshake are not exercised");
@@ -88,6 +119,17 @@ public final class TeleportVerification {
                 removePlayer(second);
             }
         }
+    }
+
+    private static void verifyDeathExperience(MinecraftServer server, ServerPlayer player, ServerLevel sift) {
+        require(player.teleportTo(sift, 0.5, -700, 0.5, Set.<Relative>of(), 0, 0, true),
+            "Could not place death-verification player inside The Null");
+        player.experienceLevel = 17;
+        player.totalExperience = 1234;
+        player.experienceProgress = 0.75F;
+        player.die(sift.damageSources().inWall());
+        require(player.experienceLevel == 0 && player.totalExperience == 0 && player.experienceProgress == 0.0F,
+            "Death in The Null did not wipe XP before vanilla drop handling");
     }
 
     private static ServerPlayer createPlayer(MinecraftServer server, ServerLevel level,

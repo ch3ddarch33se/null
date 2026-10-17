@@ -15,7 +15,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
 /**
- * Standalone temporary world provider. No survival portals or custom assets.
+ * Standalone world provider with vanilla-block portal and lifecycle systems.
  */
 public final class TheNull implements ModInitializer {
     public static final String MOD_ID = "thenull";
@@ -24,14 +24,17 @@ public final class TheNull implements ModInitializer {
     @Override
     public void onInitialize() {
         Registry.register(BuiltInRegistries.CHUNK_GENERATOR, Identifier.parse("thenull:layered"), LayeredChunkGenerator.CODEC);
+        NullPortal.initialize();
+        NullBlockTimers.initialize();
         ServerTickEvents.END_SERVER_TICK.register(server -> {
+            NullBlockTimers.tick(server);
             for (var level : server.getAllLevels()) {
                 if (level.getChunkSource().getGenerator() instanceof LayeredChunkGenerator layered) {
                     layered.garbageCollectLowerBuffers();
                 }
             }
         });
-        LOGGER.info("The Null native generation development build");
+        LOGGER.info("The Null v0.0.4 initialized");
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
             registerCommands(dispatcher);
         });

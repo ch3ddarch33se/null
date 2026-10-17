@@ -7,6 +7,8 @@ import java.util.function.Consumer;
  * paths and caverns operate only below the protected native surface band.
  */
 public final class CaveSystem {
+    private static final int CHAMBER_ROOF_MASK_MIN_Y = CentralChamber.AIR_MAX_Y - 3;
+    private static final int CHAMBER_ROOF_OUTPUT_MIN_Y = CentralChamber.AIR_MAX_Y;
     private final TunnelCarver original,dense;
     private final CavernCarver caverns;
     private final CaveSettings settings;
@@ -69,6 +71,27 @@ public final class CaveSystem {
             System.arraycopy(joined,(y*fl+iz+4)*fw+4,air,(y*nz+iz)*nx,nx);
         for(var reservation:reservations)reservation.apply(air,x,z,nx,nz);
         return air;
+    }
+
+    /**
+     * Returns the small cave slice that can remain visible above the chamber.
+     * The attached caverns and dense graph end at Y=-369; only original
+     * entrance paths can reach above the chamber ceiling at Y=-300.
+     */
+    public boolean[] carveAboveCentralChamber(int x,int z,int nx,int nz) {
+        int rawMin=CHAMBER_ROOF_MASK_MIN_Y,rawMax=TunnelCarver.MAX_Y;
+        int rawWidth=nx+10,rawLength=nz+10;
+        int rawDepth=rawMax-rawMin+1;
+        boolean[] raw=new boolean[rawWidth*rawLength*rawDepth];
+        original.carveInto(raw,x-5,z-5,rawWidth,rawLength,rawMin,rawMax,null);
+
+        int outputMin=CHAMBER_ROOF_OUTPUT_MIN_Y,outputMax=TunnelCarver.MAX_Y;
+        int outputDepth=outputMax-outputMin+1;
+        boolean[] result=new boolean[nx*nz*outputDepth];
+        for(int y=outputMin;y<=outputMax;y++)for(int iz=0;iz<nz;iz++)
+            System.arraycopy(raw,((y-rawMin)*rawLength+iz+5)*rawWidth+5,
+                result,((y-outputMin)*nz+iz)*nx,nx);
+        return result;
     }
 
 }
