@@ -1,4 +1,5 @@
-.gradle
+.gradle/
+.gradle-user-home/
 **/build/
 !**/src/**/build/
 
@@ -13,11 +14,17 @@ gradle-app.setting
 
 # Cache of project
 .gradletasknamecache
-.gradle-user-home/
 libs/*.jar
 run/
 runs/
+logs/
+*.log
+
+# Operating-system metadata
 .DS_Store
+Thumbs.db
+Desktop.ini
+._*
 
 # Eclipse Gradle plugin generated files
 # Eclipse Core
