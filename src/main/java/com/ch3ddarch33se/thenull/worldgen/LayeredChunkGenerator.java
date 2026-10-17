@@ -121,7 +121,7 @@ public final class LayeredChunkGenerator extends ChunkGenerator {
     }
 
     @Override public void spawnOriginalMobs(WorldGenRegion region) { upper.spawnOriginalMobs(region); }
-    @Override public int getGenDepth() { return 1024; }
+    @Override public int getGenDepth() { return 2016; }
     @Override public int getMinY() { return NativeNullTerrain.MIN_Y; }
     @Override public int getSeaLevel() { return upper.getSeaLevel(); }
 
@@ -138,8 +138,12 @@ public final class LayeredChunkGenerator extends ChunkGenerator {
         Arrays.fill(blocks, Blocks.AIR.defaultBlockState());
         for (int y = bottom; y <= top; y++) {
             blocks[y - bottom] = y >= 0 ? upperColumn.getBlock(y)
-                : y >= -4 || y < TunnelCarver.MIN_Y ? Blocks.BEDROCK.defaultBlockState()
+                : y >= -4 || y <= CentralChamber.BEDROCK_MAX_Y ? Blocks.BEDROCK.defaultBlockState()
                 : y >= NativeNullTerrain.GAP_MIN_Y ? Blocks.AIR.defaultBlockState()
+                : y == CentralChamber.FLOOR_Y ? lowerSettings.value().defaultBlock()
+                : y >= CentralChamber.AIR_MIN_Y && y <= CentralChamber.AIR_MAX_Y
+                    && CentralChamber.containsColumn(x, z)
+                    ? CentralChamber.isOrbShell(x, y, z) ? Blocks.TINTED_GLASS.defaultBlockState() : Blocks.AIR.defaultBlockState()
                 : y >= NativeNullTerrain.SURFACE_MIN_Y ? lowerColumn.getBlock(y)
                 : lowerSettings.value().defaultBlock();
         }

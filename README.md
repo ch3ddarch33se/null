@@ -6,7 +6,7 @@ progression, and environmental mechanics.
 
 ## Current Version
 
-v0.0.3-dev — Experimental native-generation prototype
+v0.0.4 — Standalone-generation release
 
 Currently being developed for Minecraft Java Edition 26.3 using Fabric.
 
@@ -18,7 +18,7 @@ unfinished content.
 ## Building
 
 With Java 25 installed, run `./gradlew build`. The playable JAR is
-`build/libs/The-Null-0.0.3-dev.jar`; install with Minecraft 26.3, Fabric Loader
+`build/libs/The-Null-0.0.4.jar`; install with Minecraft 26.3, Fabric Loader
 0.19.5 and Fabric API 0.161.0+26.3. Sift Backport is no longer required.
 
 Create a **new world**. Both regions share `thenull:sift`. Operator commands:
@@ -31,6 +31,12 @@ terrain/biome data and vanilla placeholder blocks; artistic assets remain unfini
 
 The latest [lower terrain and cave refinement](docs/TERRAIN_REFINEMENT.md) adds
 Overworld-style regional geometry and denser, varied connected passages.
+
+This release extends the shared dimension down to Y=-1760 and adds a 700-block
+central Sculk chamber with a vanilla tinted-glass ellipsoid, a breakable return
+portal, per-player saved return positions, and timed block restoration/corrosion.
+Client rendering uses spherical section-distance culling and a black, zero-sky
+ambient view below the bedrock separator. Use fresh worlds for this height change.
 
 ## License
 

@@ -1,7 +1,7 @@
 {
-  "min_y": -768,
-  "height": 1024,
-  "logical_height": 1024,
+  "min_y": -1760,
+  "height": 2016,
+  "logical_height": 2016,
   "has_skylight": true,
   "has_ceiling": false,
   "has_ender_dragon_fight": false,

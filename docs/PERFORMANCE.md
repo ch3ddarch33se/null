@@ -1,10 +1,57 @@
 # Performance records
 
+## v0.0.4 chamber and cave update
+
+Fresh-seed report: `build/reports/performance-v004-optimized.txt` and
+`performance-v004-optimized-requests.csv`. Java 25.0.4.1, 10 available
+processors, 2 GiB server heap, seed 123456789, fresh disposable world. The
+benchmark ran four warmups and 32 FULL chunk requests inside 20 chunk units of
+the chamber center, then sampled 100 loaded ticks and 100 cached requests.
+
+| Server metric | v0.0.4 chamber workload |
+| --- | ---: |
+| Fresh FULL request mean / p50 / p95 / max | 60.012 / 58.802 / 95.308 / 106.122 ms |
+| Generation tick mean / p95 / max | 69.947 / 112.994 / 115.943 ms |
+| Requests over 50 ms | 21 / 32 |
+| Loaded tick mean / p95 / max | 0.414 / 0.706 / 11.954 ms |
+| Loaded ticks over 50 ms | 0 / 100 |
+| Cached request mean / p95 | 0.018 / 0.035 ms |
+
+The matched v0.1.0-alpha chamber run measured 88.045 ms mean and 127.248 ms p95
+with the same seed, request pattern and server settings. This update reduced
+those figures by 31.8% and 25.1%. The run is synchronous and includes neighbour
+generation and lighting; it is not isolated noise CPU. Profiling covered 944
+lower chunk passes: average native density time was 9.476 ms, the finish pass
+was 2.652 ms, and cave-mask construction was 0.581 ms. Deep uniform AIR
+sections now reuse their existing empty palettes, chamber-edge sections are
+filled by column where the orb cannot intersect, and chunks inside the chamber
+only build the 44-block cave slice that can remain exposed above Y=-300. The
+hidden 463-block cave mask is omitted there. Loaded-tick maximum was 11.954 ms.
+
+The packaged server measured **59.636% air** in the exterior 240x240 cave sample
+at seed 123456789, excluding the central chamber, empty gap and open surface
+above the density-defined underground. The previous sample at the same site was
+53.188%, a rise of 6.448 percentage points. Cave-core openness is 65.891%, up
+from 58.762%. A separate four-seed fixed-ceiling survey averaged 59.382% (range
+53.904–67.714%); the variation across seeds and regions remains substantial.
+The production sample's largest connected component contains 99.996% of the
+air, with no enclosed isolated components.
+
+One client verification passed on an Apple M4/OpenGL at 854x480, render and
+simulation distance 8, VSync off, no shaders, and gamma 0. FPS means were 498.8
+in the Overworld, 1006.8 at the dark Null landing, and 732.4 in upper Sift.
+Glow Lichen, sky/ambient mixins, commands, and the changed spherical culler all
+loaded and rendered. `Chunk Sections UBO` reached 1024 entries in this run,
+down from 2048 in the earlier client capture. Integrated server startup still
+logged a catch-up warning while distant chunks generated; these settled FPS
+samples do not measure that transient load cost. Details are in
+`build/reports/client-performance.txt` and `runs/client-performance/logs/latest.log`.
+
 Current terrain-refinement benchmarks and their limitations are recorded in
 [TERRAIN_REFINEMENT.md](TERRAIN_REFINEMENT.md); the original native/standalone
 milestone is in [NATIVE_REFACTOR.md](NATIVE_REFACTOR.md). The following preserves the measured
 0.0.2 tunnel-path history for comparison; it describes the external Sift provider.
-The current dense-cave openness and performance results are recorded in
+The earlier v0.0.3-dev dense-cave geometry and performance results are recorded in
 [CAVE_ECOSYSTEM.md](CAVE_ECOSYSTEM.md).
 
 ## Tunnel-path revision — measured validation, 2026-10-11

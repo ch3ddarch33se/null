@@ -6,7 +6,7 @@ import net.fabricmc.loader.api.FabricLoader;
 
 /** Immutable settings, read once per launch. Changes require fresh chunks. */
 public record CaveSettings(double cavernScale, double wallLichen, double floorLichen) {
-    public static final CaveSettings DEFAULT = new CaveSettings(1.00, 0.55, 0.20);
+    public static final CaveSettings DEFAULT = new CaveSettings(1.12, 0.55, 0.20);
     private static CaveSettings loaded;
 
     public CaveSettings {

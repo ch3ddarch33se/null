@@ -98,7 +98,7 @@ tasks.register('verifyEcosystemGeometry', JavaExec) {
     mainClass = 'com.ch3ddarch33se.thenull.verification.EcosystemGeometryVerification'
     maxHeapSize = '1G'
     systemProperty 'java.awt.headless', 'true'
-    systemProperty 'thenull.ecosystemScale', providers.gradleProperty('ecosystemScale').orElse('1.00').get()
+    systemProperty 'thenull.ecosystemScale', providers.gradleProperty('ecosystemScale').orElse('1.12').get()
     systemProperty 'thenull.ecosystemSize', providers.gradleProperty('ecosystemSize').orElse('128').get()
 }
 

@@ -57,9 +57,18 @@ public final class TunnelCarver {
 
     /** Adds this graph to a same-sized mask, avoiding a second full-height allocation. */
     public void carveInto(boolean[] air,int startX,int startZ,int sizeX,int sizeZ,Consumer<CavePath> observer) {
-        int expected=Math.multiplyExact(Math.multiplyExact(sizeX,sizeZ),DEPTH);
+        carveInto(air,startX,startZ,sizeX,sizeZ,MIN_Y,MAX_Y,observer);
+    }
+
+    /** Adds only the requested vertical slice to a compact mask. */
+    public void carveInto(boolean[] air,int startX,int startZ,int sizeX,int sizeZ,
+        int minY,int maxY,Consumer<CavePath> observer) {
+        if(minY<MIN_Y||maxY>MAX_Y||minY>maxY)throw new IllegalArgumentException("Invalid cave slice "+minY+".."+maxY);
+        int expected=Math.multiplyExact(Math.multiplyExact(sizeX,sizeZ),maxY-minY+1);
         if(air.length!=expected)throw new IllegalArgumentException("Expected cave mask length "+expected);
-        var target = new Target(startX, startZ, sizeX, sizeZ, air, observer, profile.radius, profile.ceiling, profile.floor);
+        int targetCeiling=Math.min(maxY,profile.ceiling),targetFloor=Math.max(minY,profile.floor);
+        var target = new Target(startX, startZ, sizeX, sizeZ, air, observer, profile.radius,
+            minY,targetCeiling,targetFloor);
         // Nodes, endpoints and controls plus maximum radius are confined to
         // owner offsets -2..2. The same conservative owner set works for a
         // single chunk, a large region and negative world coordinates.
@@ -125,8 +134,8 @@ public final class TunnelCarver {
     }
 
     private void path(Target target, Point from, Point to, int cx, int cz, int layer, int salt, Kind kind) {
-        if(Math.max(from.y,to.y)+11+profile.radius<profile.floor
-            ||Math.min(from.y,to.y)-11-profile.radius>profile.ceiling)return;
+        if(Math.max(from.y,to.y)+11+profile.radius<target.floor
+            ||Math.min(from.y,to.y)-11-profile.radius>target.ceiling)return;
         // Reject distant endpoints before allocating random/control objects.
         if (!target.couldReach(from, to, 43 + profile.radius)) return;
         Random random = new Random(SeedHash.hash(seed, cx, cz, salt + 4000));
@@ -208,11 +217,11 @@ public final class TunnelCarver {
         private final boolean[] air;
         private final Consumer<CavePath> observer;
         private final double radiusLimit;
-        private final int ceiling,floor;
+        private final int baseY,ceiling,floor;
         private Target(int x0,int z0,int nx,int nz,boolean[] air,Consumer<CavePath> observer,
-            double radiusLimit,int ceiling,int floor) {
+            double radiusLimit,int baseY,int ceiling,int floor) {
             this.x0=x0;this.z0=z0;this.nx=nx;this.nz=nz;this.air=air;this.observer=observer;
-            this.radiusLimit=radiusLimit;this.ceiling=ceiling;this.floor=floor;
+            this.radiusLimit=radiusLimit;this.baseY=baseY;this.ceiling=ceiling;this.floor=floor;
         }
         boolean couldReach(Point from, Point to, double margin) {
             return Math.max(from.x, to.x) + margin >= x0 && Math.min(from.x, to.x) - margin <= x0 + nx
@@ -263,7 +272,7 @@ public final class TunnelCarver {
                     int lowX = Math.max(x0, (int) Math.ceil(x - extent - .5));
                     int highX = Math.min(x0 + nx - 1, (int) Math.floor(x + extent - .5));
                     if (lowX <= highX) {
-                        int row = ((by - MIN_Y) * nz + bz - z0) * nx;
+                int row = ((by - baseY) * nz + bz - z0) * nx;
                         Arrays.fill(air, row + lowX - x0, row + highX - x0 + 1, true);
                     }
                 }

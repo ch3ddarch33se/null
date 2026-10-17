@@ -2,7 +2,7 @@
 
 ## Current standalone development build
 
-The playable 0.0.3-dev JAR contains original The Null Java/world-generation data
+The playable 0.0.4 JAR contains original The Null Java/world-generation data
 and references vanilla blocks. It contains no Sift Backport dependency, overlay,
 source, textures, models or sounds. Existing project attribution and licenses
 remain intact. The original heightmap/section-fill implementation is confined
